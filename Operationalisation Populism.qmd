@@ -1,0 +1,403 @@
+---
+title: "Operationalisation Populism"
+format: html
+editor: visual
+---
+
+
+# Operationalisation of Populism
+
+# Create maximum value from populism dimensions
+```{r}
+# Spalte mit Max Wert erstellen
+df_gesamt$pop_max <- pmax(df_gesamt$Anti_Elitism, df_gesamt$People_Centrism, na.rm = TRUE)
+
+min(df_gesamt$pop_max, na.rm = TRUE)
+max(df_gesamt$pop_max, na.rm = TRUE)
+# es gibt keinen Wert der 0 ist
+```
+
+
+# Create boxplot
+
+```{r}
+boxplot(df_gesamt$pop_max,
+        main = "Verteilung des maximalen Populismuswerts (pop_max)",
+        ylab = "Populismus max",
+        col = "skyblue")
+
+boxplot.stats(df_gesamt$pop_max)$stats
+# Whisker: 0,038513
+
+whisker <- 0.038513
+
+# Wie viele Werte über Max Whisker
+sum(df_gesamt$pop_max > 0.038513, na.rm = TRUE)
+mean(df_gesamt$pop_max > 0.038513, na.rm = TRUE) * 100
+#### Anzahl der Werte mit pop_max > 0.038513: 12.377
+# Prozentualer Anteil: 14,54 
+```
+
+## Violin plot with whiskers and percentiles
+```{r}
+# Perzentile und Whisker berechnen
+perc_90 <- quantile(df_gesamt$pop_max, 0.9)
+perc_92 <- quantile(df_gesamt$pop_max, 0.92)
+perc_95 <- quantile(df_gesamt$pop_max, 0.95)
+whisker <- boxplot.stats(df_gesamt$pop_max)$stats[5]
+median_val <- median(df_gesamt$pop_max)
+
+# Dataframe für Schwellenlinien (für Legende)
+cutoffs <- data.frame(
+  Wert = c(whisker, perc_90, perc_92, perc_95, median_val),
+  Schwelle = factor(c("Whisker", "90% Perzentil", "92% Perzentil", "95% Perzentil", "Median"),
+                    levels = c("Whisker", "90% Perzentil", "92% Perzentil", "95% Perzentil", "Median"))
+)
+
+violinplot_schwellenwerte <- ggplot(df_gesamt, aes(x = "", y = pop_max)) +
+  geom_violin(fill = "lightblue", color = "black", width = 0.7) +
+  geom_hline(data = cutoffs, aes(yintercept = Wert, color = Schwelle, linetype = Schwelle), size = 1) +
+  scale_color_manual(values = c(
+    "Whisker" = "#B34FDE",
+    "90% Perzentil" = "#F59E42",
+    "92% Perzentil" = "red",
+    "95% Perzentil" = "#33A02C",
+    "Median" = "black"
+  )) +
+  scale_linetype_manual(values = c(
+    "Whisker" = "dashed",
+    "90% Perzentil" = "dashed",
+    "92% Perzentil" = "dashed",
+    "95% Perzentil" = "dashed",
+    "Median" = "solid"
+  )) +
+  labs(
+    title = "Verteilung des maximalen Populismuswertes",
+    subtitle = "Violinplot mit Schwellenwerten, Perzentilen und Median",
+    x = NULL,
+    y = "Maximaler Populismus-Score pro Satz",
+    color = "Schwellenwert",
+    linetype = "Schwellenwert"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "right"
+  )
+
+ggsave(
+  filename = "violinplot_schwellenwerte.png",  
+  plot = violinplot_schwellenwerte,
+  width = 8,         
+  height = 6,         
+    units = "in",        
+  dpi = 300              
+)
+ggsave(
+  filename = "violinplot_schwellenwerte_2.png",  
+  plot = violinplot_schwellenwerte,
+  width = 8,
+  height = 6,
+  units = "in",
+  dpi = 600    # or 1200
+)
+
+ggsave(
+  filename = "violinplot_schwellenwerte_3.pdf",
+  plot = violinplot_schwellenwerte,
+  width = 8,
+  height = 6,
+  units = "in"
+)
+
+# Install ragg (if necessary)
+install.packages("ragg")
+
+
+# Then specify device in ggsave:
+ggsave(
+  filename = "violinplot_schwellenwerte_ragg.png",
+  plot = violinplot_schwellenwerte,
+  width = 8,
+  height = 6,
+  units = "in",
+  dpi = 600,
+  device = ragg::agg_png
+)
+```
+
+## Edge cases of the whisker
+
+```{r}
+# Grenzfälle des Whiskers
+whisker <- 0.038513
+
+# Perzentilrang berechnen (wie viel Prozent sind kleiner/gleich)
+perzentil <- ecdf(df_gesamt$pop_max)(whisker) * 100
+perzentil
+## 85,5 perzentil 
+
+# Top 5 über dem Whisker
+top5_ueber_whisker <- df_gesamt %>%
+  filter(pop_max > whisker) %>%
+  arrange(pop_max) %>%
+  slice_head(n = 5) %>%
+  mutate(grenztyp = "über")
+
+# Top 5 unter dem Whisker
+top5_unter_whisker <- df_gesamt %>%
+  filter(pop_max <= whisker) %>%
+  arrange(desc(pop_max)) %>%
+  slice_head(n = 5) %>%
+  mutate(grenztyp = "unter")
+
+# Combine into one table
+
+top5_tab_whisker <- bind_rows(top5_ueber_whisker, top5_unter_whisker) %>%
+  select(grenztyp, Satz = sentences...20, Populismus = pop_max, Sendung = sendung)
+
+top5_tab_whisker <- bind_rows(top5_ueber_whisker, top5_unter_whisker) %>%
+  select(grenztyp, sendung, sentences...20, pop_max)
+```
+
+### Table of edge cases whisker
+
+```{r}
+last_ueber <- max(which(top5_tab_whisker$grenztyp == "über"))
+
+ top5_tab_whisker_final <- top5_tab_whisker %>%
+  mutate(
+     Populismus = round(as.numeric(pop_max), 3),
+     Grenztyp   = ifelse(grenztyp == "über", "▲ über", "▼ unter"),
+     Sendung    = ifelse(sendung == "Haf", "HaF", sendung)
+   ) %>%
+   select(Grenztyp, sentences...20, Populismus, Sendung) %>%
+   gt() %>%
+   tab_header(
+     title = "Grenzfälle rund um den Whisker",
+     subtitle = paste0("Top 5 Sätze über und unter der Grenze (Whisker = ", whisker, 
+                       ", ca. ", round(perzentil,1), " Perzentil)")
+   ) %>%
+   fmt_number(
+     columns = "Populismus",
+     decimals = 3
+   ) %>%
+   cols_label(
+     Grenztyp   = "Grenztyp",
+     sentences...20       = "Satz",
+     Populismus = "Populismus-Score",
+     Sendung    = "Sendung"
+   ) %>%
+   tab_style(
+     style = cell_borders(
+       sides = "bottom",
+       color = "#2d2d2d",
+       weight = px(4)
+     ),
+     locations = cells_body(rows = last_ueber)
+   ) %>%
+   cols_width(
+     sentences...20 ~ px(900)
+   ) %>%
+   tab_options(
+     table.font.size = 14,
+     heading.align = "left",
+     data_row.padding = px(7)
+   )
+
+
+library(webshot2)
+# Save as HTML
+gtsave(top5_tab_whisker_final, "top5_tab_whisker_final.html")
+
+# Save HTML as PNG 
+webshot("top5_tab_whisker_final.html", "top5_tab_whisker_final.png", zoom = 2) 
+```
+
+# Percentile analysis
+## Content review 90-95th percentile
+```{r}
+# Perzentil-Schwellen definieren (90% bis 95%)
+probs <- seq(0.90, 0.95, by = 0.01)
+grenzwerte <- quantile(df_gesamt$pop_max, probs, na.rm = TRUE)
+
+#For-Schleife für Grenzfälle
+for(i in seq_along(grenzwerte)) {
+  cat("\n--- Percentile:", names(grenzwerte)[i], 
+      "(Threshold:", grenzwerte[i], ") ---\n")
+  
+  # Fälle knapp über der Schwelle
+  cat("\nCases JUST ABOVE the threshold:\n")
+  print(
+    df_gesamt %>%
+      filter(pop_max > grenzwerte[i]) %>%
+      arrange(pop_max) %>%
+      select(sendung, sentences...20, pop_max) %>%
+      head(5)
+  )
+  
+  # Fälle knapp unter der Schwelle
+  cat("\nCases JUST BELOW the threshold:\n")
+  print(
+    df_gesamt %>%
+      filter(pop_max <= grenzwerte[i]) %>%
+      arrange(desc(pop_max)) %>%
+      select(sendung, sentences...20, pop_max) %>%
+      head(5)
+  )
+}
+```
+
+# 95th percentile
+
+## Edge cases 95th percentile
+```{r}
+# 95. Perzentil-Schwelle berechnen
+schwelle_95 <- quantile(df_gesamt$pop_max, 0.95, na.rm = TRUE)
+
+# Anzahl der Sätze über der Schwelle (d.h. populistisch nach deiner Definition)
+anzahl_95 <- sum(df_gesamt$pop_max > schwelle_95, na.rm = TRUE)
+
+# Prozentualer Anteil dieser Sätze
+anteil_95 <- mean(df_gesamt$pop_max > schwelle_95, na.rm = TRUE) * 100
+
+## Number of sentences above the 95% threshold: 4,256 
+## Percentage share: 4.999941 %
+
+# per broadcast:
+df_gesamt %>%
+  group_by(sendung) %>%
+  summarise(
+    n_gesamt = n(),
+    n_populistisch = sum(pop_max > schwelle_95, na.rm = TRUE),
+    anteil_populistisch = mean(pop_max > schwelle_95, na.rm = TRUE) * 100
+  ) %>%
+  arrange(desc(anteil_populistisch))
+
+
+# Top 5 above threshold
+ top5_ueber <- df_gesamt %>%
+   filter(pop_max > schwelle_95) %>%
+   arrange(pop_max) %>%
+   slice_head(n = 5) %>%
+   mutate(grenztyp = "über")
+
+# Top 5 below threshold
+ top5_unter <- df_gesamt %>%
+   filter(pop_max <= schwelle_95) %>%
+   arrange(desc(pop_max)) %>%
+   slice_head(n = 5) %>%
+   mutate(grenztyp = "unter")
+
+# Combine into one table
+ top5_tab <- bind_rows(top5_ueber, top5_unter) %>%
+   select(grenztyp, sendung, sentences...20, pop_max)
+
+```
+
+### Table of edge cases 95th percentile
+```{r}
+last_ueber <- max(which(top5_tab$grenztyp == "über"))
+
+top5_tab_final <- top5_tab %>%
+  # Spalten umbenennen und Populismus-Score runden
+  mutate(
+    Populismus = round(as.numeric(pop_max), 3),
+    Grenztyp   = ifelse(grenztyp == "über", "▲ über", "▼ unter"),
+    Satz       = sentences...20,
+    sendung    = ifelse(sendung == "Haf", "HaF", sendung)
+  ) %>%
+  # Nur die gewünschten Spalten behalten und Reihenfolge festlegen!
+  select(Grenztyp, Satz, Populismus, sendung) %>%
+  gt() %>%
+  tab_header(
+    title = "Grenzfälle rund um das 95. Perzentil",
+    subtitle = "Top 5 Sätze über und unter der Grenze"
+  ) %>%
+  fmt_number(
+    columns = "Populismus",
+    decimals = 3
+  ) %>%
+  cols_label(
+    Grenztyp   = "Grenztyp",
+    Satz       = "Satz",
+    Populismus = "Populismus-Score",
+    sendung    = "Sendung"
+  ) %>%
+  tab_style(
+    style = cell_borders(
+      sides = "bottom",
+      color = "#2d2d2d",
+      weight = px(4)
+    ),
+    locations = cells_body(rows = last_ueber)
+  ) %>%
+  cols_width(
+    Satz ~ px(900)
+  ) %>%
+  tab_options(
+    table.font.size = 14,
+    heading.align = "left",
+    data_row.padding = px(7)
+  )
+
+
+# Save as HTML
+gtsave(top5_tab_final, "top5_tab_final.html")
+
+# Save HTML as PNG
+webshot("top5_tab_final.html", "top5_tab_final.png", zoom = 2)  
+```
+
+# Operationalization of Populism (TRUE/FALSE) column
+```{r}
+df_gesamt <- df_gesamt %>%
+  mutate(populismus = pop_max > schwelle_95)
+```
+
+# Clean up dataset
+```{r}
+df_gesamt <- df_gesamt %>%
+  relocate(pop_max, populismus, .after = sendung)
+
+
+# Add populism share as column
+df_gesamt <- df_gesamt %>%
+  group_by(name, party, job) %>%
+  mutate(
+    saetze_gesamt = n(),
+    saetze_pop = sum(populismus == 1, na.rm = TRUE),
+    anteil_pop = saetze_pop / saetze_gesamt
+  ) %>%
+  ungroup()
+```
+
+# Dataset description
+
+```{r}
+df_gesamt <- df_gesamt %>%
+  mutate(
+    pop_max = pmax(Anti_Elitism, People_Centrism, na.rm = TRUE),
+    anti_elite_is_max = Anti_Elitism == pop_max,
+    people_centrism_is_max = People_Centrism == pop_max
+  )
+
+  sum(df_gesamt$populismus == 1 & df_gesamt$anti_elite_is_max, na.rm = TRUE) # 3629
+  sum(df_gesamt$populismus == 1 & df_gesamt$people_centrism_is_max, na.rm = TRUE) #627
+```
+
+# Validation of populism classification
+
+
+```{r}
+set.seed(146)
+
+validität <- df_gesamt %>%
+  filter(populismus == TRUE) %>%  
+  sample_n(380) %>%
+  select(sentences...20)             
+
+write.csv(validität, "validität.csv", row.names = FALSE)
+```

@@ -1,0 +1,1432 @@
+---
+title: "Data"
+format: html
+editor: visual
+---
+# Data 
+
+## Hart aber Fair
+
+
+```{r}
+# Subdictionary
+project_dir <- here::here("data_transcripts")
+```
+
+
+```{r data-import}
+transcripts_haf_v1 <- list(
+    raw = fs::dir_ls(
+        path = "E:/02_leuner/bachelorarbeit_talkshows/data_transcripts/hart_aber_fair_2", 
+        glob = "*.txt"
+        ) %>%
+        # Read the files into the list
+        map(~ read_file(.)) %>%
+        # Set the list names to the base file names (without the path)
+        set_names(~ str_extract(basename(.), "^(.*)(?=\\.txt)"))
+)
+```
+
+
+```{r recode-data-transcripts-correct}
+transcripts_haf_v1$correct <- transcripts_haf_v1$raw %>% 
+    # Import and process each file
+    map(~ read_file(.) %>%
+            str_split("\n") %>%
+            .[[1]] %>%
+            tibble(line = .) %>%
+            mutate(
+                speaker = str_extract(line, "S\\d+"),  # Extract speaker 
+                timestamp = str_extract(line, "\\[\\d{2}:\\d{2}:\\d{2}\\]"),  # Extract timestamps
+                across(timestamp, ~str_remove_all(., "[\\[\\]]")),  # Remove the brackets from timestamp
+                dialogue = str_remove(line, "S\\d+ \\[\\d{2}:\\d{2}:\\d{2}\\]: "),  # Extract dialogue text
+                dialogue_length = nchar(dialogue),
+            ) %>% 
+            filter( # Filter out lines without speaker or dialogue
+                !is.na(speaker) &
+                !is.na(dialogue)
+                ) %>% 
+            mutate(
+                timestamp = hms::as_hms(timestamp),  # Convert timestamp to hms object
+                duration = as.numeric(difftime(lead(timestamp), timestamp, units = "secs"))  # Calculate duration
+            )
+    ) %>%
+    bind_rows(.id = "source") %>% 
+    mutate(
+        program = case_when(
+            str_detect(source, "Lanz") ~ "ZDF",
+            str_detect(source, "Illner") ~ "ZDF",
+            str_detect(source, "Hart_aber_fair") ~ "Das Erste",
+            TRUE ~ "unknown"
+        ), 
+        moderator = case_when(
+            str_detect(source, "Lanz")  ~ "Lanz",
+            str_detect(source, "Illner") ~ "Illner",
+            str_detect(source, "Hart_aber_fair") ~ "hart_aber_fair",
+            TRUE ~ "unknown"
+        ),
+        id_moderator = case_when(
+            moderator == "Lanz" ~ 1,
+            moderator == "Illner" ~ 2,
+            moderator == "hart_aber_fair" ~ 3,
+            TRUE ~ 0
+        ),
+        prefix = paste0(
+            ifelse(program == "ZDF", "ZDF", "ARD"),
+            id_moderator, "_"
+        ),
+        id_moderator = paste0(prefix, tolower(moderator))
+    ) %>%
+    mutate(
+        program_prefix = case_when(
+            program == "ZDF" ~ "Z",
+            program == "Das Erste" ~ "A",
+            TRUE ~ "U"
+        ),
+        moderator_prefix = case_when(
+            moderator == "Lanz" ~ "l",
+            moderator == "Illner" ~ "i",
+            moderator == "hart_aber_fair" ~ "haf",
+            TRUE ~ "u"
+        ),
+        id_speaker = paste0(program_prefix, moderator_prefix, source, "_", speaker)
+    ) %>%
+    select(-line, -prefix, -program_prefix, -moderator_prefix)
+
+# drop unnecessary lines
+transcripts_haf_v1<- transcripts_haf_v1$correct %>%
+  select( -id_speaker) 
+
+# Show_id
+make_show_id <- function(source) {
+  # delate "Hart_aber_fair_"
+  datum <- sub("Hart_aber_fair_", "", source)
+  # interpret as date (Format: Jahr.Monat.Tag, z.B. 2024.09.02)
+  datum_date <- as.Date(datum, "%Y.%m.%d")
+  # build show_id 
+  paste0("haf_", format(datum_date, "%Y%m%d"))
+}
+
+transcripts_haf_v1$show_id <- make_show_id(transcripts_haf_v1$source)
+
+
+
+# ceate dialogue_id
+
+transcripts_haf_v1 <- transcripts_haf_v1 %>%
+  group_by(show_id) %>%
+  mutate(dialogue_id = sprintf("%s_d_%03d", show_id, row_number())) %>%
+  ungroup()
+
+
+# sort date
+transcripts_haf_v1 <- transcripts_haf_v1 %>%
+  mutate(
+    date_str = str_extract(source, "\\d{4}\\.\\d{2}\\.\\d{2}"),
+    date = as.Date(date_str, "%Y.%m.%d")
+  ) %>%
+  arrange(date)
+
+```
+
+
+```{r}
+write.csv(transcripts_haf_v1, "transcripts_haf_v1.csv", row.names=FALSE)
+```
+
+### Load both datasets
+```{r}
+# Data Shows
+library(readr)
+transcripts_haf_v1 <- read_csv("transcripts_haf_v1.csv")
+
+# Data Excel Speaker information
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+```
+
+
+### Speaker  identification
+
+```{r}
+transcripts_haf_v1 <- transcripts_haf_v1 %>%
+  mutate(
+# Speaker_ID:
+    speaker_id = case_when (
+    # MONAT APRIL
+    ### 29.04.24
+     show_id == "haf_20240429" & speaker %in% c("S02") ~ "sp_host_04",                 # Louis Klamroth (immer)
+    show_id == "haf_20240429" & speaker %in% c("S10") ~ "sp_csu_03",                  # Markus Söder, CSU
+    show_id == "haf_20240429" & speaker %in% c("S04") ~ "sp_cdu_23",                  # Mario Voigt, CDU
+    show_id == "haf_20240429" & speaker %in% c("S05") ~ "sp_bsw_02",                  # Sahra Wagenknecht, BSW
+    show_id == "haf_20240429" & speaker %in% c("S08") ~ "sp_spd_16",                  # Philipp Türmer, SPD
+    show_id == "haf_20240429" & speaker %in% c("S07") ~ "sp_medien_64",               # Enissa Armani, Medien und Kultur
+    show_id == "haf_20240429" & speaker %in% c("S09") ~ "sp_medien_02",               # Robin Alexander, Medien und Kultur
+    show_id == "haf_20240429" & speaker %in% c("S06") ~ "sp_medien_36",               # Khola Maryam Hübsch, Medien und Kultur
+    show_id == "haf_20240429" & speaker %in% c("S00", "S01", "S11") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    # MONAT MAI
+    ### 06.05.24
+    show_id == "haf_20240506" & speaker %in% c("S03") ~ "sp_host_04",                      # Louis Klamroth (immer)
+    show_id == "haf_20240506" & speaker %in% c("S02") ~ "sp_spd_13",                       # Kevin Kühnert (SPD)
+    show_id == "haf_20240506" & speaker %in% c("S06") ~ "sp_cdu_24",                       # Gitta Connemann (CDU)
+    show_id == "haf_20240506" & speaker %in% c("S10") ~ "sp_link_04",                     # Heidi Reichinnek (Die Linke)
+    show_id == "haf_20240506" & speaker %in% c("S08") ~ "sp_medien_72",                    # Tine Wittler, Medien und Kultur
+    show_id == "haf_20240506" & speaker %in% c("S11") ~ "sp_medien_73",                    # Hermann-Josef Tenhagen, Medien und Kultur
+    show_id == "haf_20240506" & speaker %in% c("S12") ~ "sp_wirt_10",                # Jürgen Michael Schick, Wirtschaft
+    show_id == "haf_20240506" & speaker %in% c("S13", "S05", "S07", "S00", "S09", "S04", "S01") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    ### 27.05.24
+    show_id == "haf_20240527" & speaker %in% c("S07", "S04") ~ "sp_host_04",               # Louis Klamroth (immer)
+    show_id == "haf_20240527" & speaker %in% c("S09", "S08") ~ "sp_fdp_02",                # Agnes Strack-Zimmermann, FDP, TN
+    show_id == "haf_20240527" & speaker %in% c("S11") ~ "sp_spd_18",                       # Katharina Barley, SPD, TN
+    show_id == "haf_20240527" & speaker %in% c("S19") ~ "sp_gruene_12",                    # Anton Hofreiter, Grüne, TN
+    show_id == "haf_20240527" & speaker %in% c("S05", "S03") ~ "sp_afd_02",                # Leif-Erik Holm, AfD, TN
+    show_id == "haf_20240527" & speaker %in% c("S02") ~ "sp_bsw_03",                       # Fabio de Masi, BSW, TN
+    show_id == "haf_20240527" & speaker %in% c("S17") ~ "sp_medien_57",                    # Gordon Repinski, Medien und Kultur, TN
+    show_id == "haf_20240527" & speaker %in% c("S15", "S14") ~ "sp_cdu_20",                # Julia Klöckner, CDU, TN
+    show_id == "haf_20240527" & speaker %in% c("S01", "S00", "S18", "S16", "S06", "S13") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    # MONAT JUNI
+    ### 03.06.24
+    show_id == "haf_20240603" & speaker %in% c("S14") ~ "sp_host_04",                 # Louis Klamroth (immer)
+    show_id == "haf_20240603" & speaker %in% c("S12") ~ "sp_spd_02",                  # Lars Klingbeil, SPD, TN
+    show_id == "haf_20240603" & speaker %in% c("S05") ~ "sp_oef_10",                 # Fatmire Alushi, Öffentlichkeit, TN
+    show_id == "haf_20240603" & speaker %in% c("S10") ~ "sp_oef_11",                 # Fredi Bobic, Öffentlichkeit, TN
+    show_id == "haf_20240603" & speaker %in% c("S11") ~ "sp_medien_58",               # Tim Bendzko, Medien und Kultur, TN
+    show_id == "haf_20240603" & speaker %in% c("S06") ~ "sp_medien_59",               # Lena Cassel, Medien und Kultur, TN
+    show_id == "haf_20240603" & speaker %in% c("S01") ~ "sp_medien_60",               # Philipp Awounou, Medien und Kultur, TN
+    show_id == "haf_20240603" & speaker %in% c("S13") ~ "e_oef_04",                 # Shkodran Mustafi, Einspieler, Öffentlichkeit
+    show_id == "haf_20240603" & speaker %in% c("S08", "S07", "S00", "S09") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    show_id == "haf_20240603" & speaker %in% c("S04") ~ "e_oef_05", # Einspieler, unbekannt Julian Nag
+   ### 10.06.24
+   show_id == "haf_20240610" & speaker %in% c("S10") ~ "sp_host_04",                  # Louis Klamroth (immer)
+    show_id == "haf_20240610" & speaker %in% c("S02") ~ "sp_medien_03",                # Juli Zeh, Medien und Kultur, TN
+    show_id == "haf_20240610" & speaker %in% c("S00") ~ "sp_oef_12",                # Wolfgang Niedecken, Medien und Kultur, TN
+    show_id == "haf_20240610" & speaker %in% c("S03") ~ "sp_cdu_21",                   # Serap Güler, CDU, TN
+    show_id == "haf_20240610" & speaker %in% c("S11") ~ "sp_medien_04",                # Helene Bubrowski, Medien und Kultur, TN
+    show_id == "haf_20240610" & speaker %in% c("S09") ~ "sp_fdp_10",                   # Konstantin Kuhle, FDP, TN
+    show_id == "haf_20240610" & speaker %in% c("S12") ~ "sp_gruene_13",                # Lamya Kaddor, Die Grünen, TN
+    show_id == "haf_20240610" & speaker %in% c("S07") ~ "sp_spd_16",                   # Philipp Türmer, SPD, TN
+    show_id == "haf_20240610" & speaker %in% c("S06") ~ "sp_medien_61",                # Emran Feroz, Medien und Kultur, TN
+    show_id == "haf_20240610" & speaker %in% c("S08") ~ "sp_oef_13",                  # Jan Labrenz, Öffentlichkeit, TN
+    show_id == "haf_20240610" & speaker %in% c("S05") ~ "sp_spd_01",                   # Scholz, SPD, Einspieler
+    show_id == "haf_20240610" & speaker %in% c("S04", "S01") ~ "e_unbekannt_01",       # Einspieler, unbekannt
+    # MONAT AUGUST
+    ### 05.08.24
+    show_id == "haf_20240805" & speaker %in% c("S06") ~ "sp_host_04",                     # Louis Klamroth (immer)
+    show_id == "haf_20240805" & speaker %in% c("S05") ~ "sp_cdu_09",                      # Norbert Röttgen, CDU, TN
+    show_id == "haf_20240805" & speaker %in% c("S02") ~ "sp_medien_62",                   # Alice Hasters, Medien und Kultur, TN
+    show_id == "haf_20240805" & speaker %in% c("S11") ~ "sp_medien_63",                   # Jörg Wimalasena, Medien und Kultur, TN
+    show_id == "haf_20240805" & speaker %in% c("S04") ~ "sp_bsw_01",                      # Amira Mohamed Ali, BSW, TN
+    show_id == "haf_20240805" & speaker %in% c("S13") ~ "sp_spd_14",                      # Ralf Stegner, SPD, TN
+    show_id == "haf_20240805" & speaker %in% c("S03") ~ "sp_oef_14",                     # Sarah Edwards, Öffentlichkeit, TN
+    show_id == "haf_20240805" & speaker %in% c("S10") ~ "sp_oef_15",                     # Jeremy Edwards, Öffentlichkeit, TN
+    show_id == "haf_20240805" & speaker %in% c("S14", "S07") ~ "e_unbekannt_01",          # Einspieler, unbekannt
+    show_id == "haf_20240805" & speaker %in% c("S09", "S08") ~ "e_ausl_01",            # Ausland, Einspieler, Trump
+    show_id == "haf_20240805" & speaker %in% c("S01") ~ "e_ausl_08",               # Ausland, Einspieler, Harris
+    show_id == "haf_20240805" & speaker %in% c("S12") ~ "e_ausl_02",                # Ausland, Einspieler, Putin
+    ### 12.08.24
+    show_id == "haf_20240812" & speaker %in% c("S08", "S12") ~ "sp_host_04",                 # Louis Klamroth (immer)
+    show_id == "haf_20240812" & speaker %in% c("S04", "S03") ~ "sp_gruene_13",               # Lamya Kaddor, Die Grünen, TN
+    show_id == "haf_20240812" & speaker %in% c("S10") ~ "sp_cdu_20",                         # Julia Klöckner, CDU, TN
+    show_id == "haf_20240812" & speaker %in% c("S02") ~ "sp_medien_35",                      # Philipp Peyman Engel, Medien und Kultur, TN
+    show_id == "haf_20240812" & speaker %in% c("S11") ~ "sp_medien_64",                      # Enissa Amani, Medien und Kultur, TN
+    show_id == "haf_20240812" & speaker %in% c("S01") ~ "sp_wiss_32",                # Jules El-Khatib, Wissenschaft, TN
+    show_id == "haf_20240812" & speaker %in% c("S06") ~ "sp_medien_50",                     # Daniel Gerlach, Experte, TN
+    show_id == "haf_20240812" & speaker %in% c("S07") ~ "e_gruene_02",                      # Robert Habeck, Einspieler, Die Grünen
+    show_id == "haf_20240812" & speaker %in% c("S05") ~ "e_spd_01",                         # Olaf Scholz, Einspieler, SPD
+    show_id == "haf_20240812" & speaker %in% c("S00") ~ "e_unbekannt_01",    
+    ### 26.08.24
+    show_id == "haf_20240826" & speaker %in% c("S07", "S06") ~ "sp_host_04",   
+    show_id == "haf_20240826" & speaker %in% c("S02") ~ "sp_cdu_07",                            # Wolfgang Bosbach, CDU, TN
+    show_id == "haf_20240826" & speaker %in% c("S09") ~ "sp_medien_65",                         # Katja Hoyer, Medien und Kultur, TN
+    show_id == "haf_20240826" & speaker %in% c("S03") ~ "sp_spd_19",                            # Sebastian Fiedler, SPD, TN
+    show_id == "haf_20240826" & speaker %in% c("S13") ~ "sp_gruene_10",                         # Katrin Göring-Eckardt, Die Grünen, TN
+    show_id == "haf_20240826" & speaker %in% c("S12") ~ "sp_oef_16",                           # Lina Herzog, Öffentlichkeit, TN
+    show_id == "haf_20240826" & speaker %in% c("S16") ~ "sp_politik_03",                        # Luca Piwodda, Politik, TN
+    show_id == "haf_20240826" & speaker %in% c("S00", "S10", "S11", "S17", "S18", "S19", 
+                                                "S14", "S08", "S20", "S05", "S04", "S01", "S15") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    # MONAT SEPT
+    ### 02.09.24
+    show_id == "haf_20240902" & speaker %in% c("S09") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20240902" & speaker %in% c("S14") ~ "sp_wirt_05",                  # Veronika Grimm, Wirtschaft
+    show_id == "haf_20240902" & speaker %in% c("S12") ~ "sp_afd_03",                         # Beatrice von Storch, AfD
+    show_id == "haf_20240902" & speaker %in% c("S02") ~ "sp_spd_01",                         # Karl Lauterbach, SPD, TN
+    show_id == "haf_20240902" & speaker %in% c("S10") ~ "sp_cdu_22",                         # Thorsten Frei, CDU
+    show_id == "haf_20240902" & speaker %in% c("S11") ~ "sp_bsw_04",                         # Christian Leye, BSW
+    show_id == "haf_20240902" & speaker %in% c("S06") ~ "sp_medien_66",                      # Hendrik Bolz, Medien und Kultur
+    show_id == "haf_20240902" & speaker %in% c("S15") ~ "sp_medien_67",                      # Jana Hensel, Medien und Kultur
+    show_id == "haf_20240902" & speaker %in% c("S08") ~ "sp_medien_01",                      # Markus Feldenkrichen, Medien und Kultur
+    show_id == "haf_20240902" & speaker %in% c("S07", "S05", "S01", "S16", "S00", "S19", "S13", "S17") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    show_id == "haf_20240902" & speaker %in% c("S18") ~ "e_cdu_01",                          # Friedrich Merz, CDU, Einspieler
+    ### 09.09.24
+    show_id == "haf_20240909" & speaker %in% c("S04") ~ "sp_host_04",                          # Louis Klamroth (immer)
+    show_id == "haf_20240909" & speaker %in% c("S08", "S07") ~ "sp_spd_20",                    # Petra Köpping, SPD
+    show_id == "haf_20240909" & speaker %in% c("S00") ~ "sp_medien_68",                        # Gilda Sahebi, Medien und Kultur
+    show_id == "haf_20240909" & speaker %in% c("S06") ~ "sp_politik_04",                       # Mikro Geißler, Politik
+    show_id == "haf_20240909" & speaker %in% c("S01") ~ "sp_cdu_11",                           # Herbert Reul, CDU
+    show_id == "haf_20240909" & speaker %in% c("S10") ~ "sp_medien_69",                        # Antje Hermenau, Medien und Kultur
+    show_id == "haf_20240909" & speaker %in% c("S13") ~ "e_cdu_01",                            # Friedrich Merz, Einspieler, CDU
+    show_id == "haf_20240909" & speaker %in% c("S05") ~ "e_csu_01",                            # Markus Söder, Einspieler, CSU
+    show_id == "haf_20240909" & speaker %in% c("S12", "S14", "S03", "S15", "S11", "S09", "S02") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    ### 23.09.24
+    show_id == "haf_20240923" & speaker %in% c("S00", "S12") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20240923" & speaker %in% c("S06", "S05") ~ "sp_spd_13",                         # Kevin Kühnert, SPD
+    show_id == "haf_20240923" & speaker %in% c("S02") ~ "sp_medien_70",                             # Katharina Warda, Medien und Kultur
+    show_id == "haf_20240923" & speaker %in% c("S09", "S10") ~ "sp_bsw_02",                         # Sarah Wagenknecht, BSW
+    show_id == "haf_20240923" & speaker %in% c("S07") ~ "sp_cdu_16",                                # Philipp Amthor, CDU
+    show_id == "haf_20240923" & speaker %in% c("S11") ~ "sp_medien_03",                             # Juli Zeh, Medien und Kultur
+    show_id == "haf_20240923" & speaker %in% c("S03") ~ "e_oef_06",                                # Doreen Lorsch, Einspieler, Öffentlichkeit
+    show_id == "haf_20240923" & speaker %in% c("S01", "S08") ~ "e_unbekannt_01",                    # E
+    ### 30.09.24
+    show_id == "haf_20240930" & speaker %in% c("S09", "S07") ~ "sp_host_04",                  # Louis Klamroth (immer)
+    show_id == "haf_20240930" & speaker %in% c("S05") ~ "sp_fdp_11",                          # Johannes Vogel, FDP
+    show_id == "haf_20240930" & speaker %in% c("S06") ~ "sp_wirt_07",                   # Wolfgang Grupp, Wirtschaft
+    show_id == "haf_20240930" & speaker %in% c("S00") ~ "sp_wirt_08",                   # Nadine Metgenberg, Wirtschaft
+    show_id == "haf_20240930" & speaker %in% c("S08") ~ "sp_link_03",                        # Jan van Aken, Die Linke
+    show_id == "haf_20240930" & speaker %in% c("S10") ~ "sp_wirt_09",                   # Josef Rick, Wirtschaft
+    show_id == "haf_20240930" & speaker %in% c("S01") ~ "sp_medien_71",                       # Julia Friedrichs, Medien und Kultur
+    show_id == "haf_20240930" & speaker %in% c("S04") ~ "e_unbekannt_01",                     # Einspieler, unbekannt
+    show_id == "haf_20240930" & speaker %in% c("S03") ~ "e_medien_01",                        # Moderation, Einspieler, Medien
+    # MONAT OKTOBER
+    ### 07.10.24
+     show_id == "haf_20241007" & speaker %in% c("S03", "S02") ~ "sp_host_04",                                             # Louis Klamroth (immer)
+    show_id == "haf_20241007" & speaker %in% c("S11") ~ "sp_gruene_14",                                                  # Michael Kellner, Bündnis 90/Die Grünen
+    show_id == "haf_20241007" & speaker %in% c("S09") ~ "sp_cdu_21",                                                     # Serap Güler, CDU
+    show_id == "haf_20241007" & speaker %in% c("S05") ~ "sp_medien_74",                                                  # Ruth Moschner, Medien und Kultur
+    show_id == "haf_20241007" & speaker %in% c("S16") ~ "sp_politik_05",                                                 # Alexander Leschik, Politik
+    show_id == "haf_20241007" & speaker %in% c("S14") ~ "sp_medien_26",                                                  # Ronen Steinke, Medien und Kultur
+    show_id == "haf_20241007" & speaker %in% c("S10") ~ "sp_wiss_33",                                            # Albrecht von Lucke, Wissenschaft
+    show_id == "haf_20241007" & speaker %in% c("S06", "S07", "S08", "S17", "S13", "S01", "S15", "S00", "S12", "S18", "S04") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    ### 21.10.24
+    show_id == "haf_20241021" & speaker %in% c("S02") ~ "sp_host_04",                         # Louis Klamroth (immer)
+    show_id == "haf_20241021" & speaker %in% c("S04") ~ "sp_spd_16",                          # Philipp Türmer, SPD
+    show_id == "haf_20241021" & speaker %in% c("S08") ~ "sp_oef_17",              # Sirka Yendes, Öffentlichkeit
+    show_id == "haf_20241021" & speaker %in% c("S03") ~ "sp_medien_73",                      # Hermann Tenhagen, Medien
+    show_id == "haf_20241021" & speaker %in% c("S12") ~ "sp_fdp_07",                          # Franziska Brandmann, FDP
+    show_id == "haf_20241021" & speaker %in% c("S05") ~ "sp_wirt_11",                   # Georg Koefler, Wirtschaft
+    show_id == "haf_20241021" & speaker %in% c("S11", "S07") ~ "sp_oef_18",       # Frau Oeser, Öffentlichkeit
+    show_id == "haf_20241021" & speaker %in% c("S15") ~ "sp_oef_19",              # Frau Weyraff, Öffentlichkeit
+    show_id == "haf_20241021" & speaker %in% c("S01", "S14", "S00", "S16", "S09", "S17", "S10", "S13") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    ### 28.10.24
+    show_id == "haf_20241028" & speaker %in% c("S12") ~ "sp_host_04",                           # Louis Klamroth (immer)
+    show_id == "haf_20241028" & speaker %in% c("S08", "S06", "S05") ~ "e_medien_01", # Moderation, Einspieler
+    show_id == "haf_20241028" & speaker %in% c("S11", "S01") ~ "e_unbekannt_01",                # unbekannt
+    show_id == "haf_20241028" & speaker %in% c("S04") ~ "sp_wirt_12",                     # Hildegard Müller, Wirtschaft
+    show_id == "haf_20241028" & speaker %in% c("S03") ~ "sp_fdp_12",                            # Frank Schäffler, FDP
+    show_id == "haf_20241028" & speaker %in% c("S02") ~ "sp_gruene_15",                         # Andreas Audretsch, Die Grünen
+    show_id == "haf_20241028" & speaker %in% c("S09") ~ "sp_medien_75",                        # Rangar Yogeshwar, Medien und Kultur
+    show_id == "haf_20241028" & speaker %in% c("S07", "S10") ~ "sp_oef_20",         # Alexander Seß, Öffentlichkeit
+    show_id == "haf_20241028" & speaker %in% c("S00") ~ "e_medien_01",
+    # MONAT NOVEMBER
+    ### 04.11.24
+    show_id == "haf_20241104" & speaker %in% c("S02") ~ "sp_host_04",                           # Louis Klamroth (immer)
+    show_id == "haf_20241104" & speaker %in% c("S10") ~ "sp_medien_76",    # Ingo Zamperoni
+    show_id == "haf_20241104" & speaker %in% c("S04") ~ "sp_wiss_34",    # Rachel Tausenfreund
+    show_id == "haf_20241104" & speaker %in% c("S08") ~ "sp_bsw_05",    
+    show_id == "haf_20241104" & speaker %in% c("S00") ~ "sp_exp_14", 
+    show_id == "haf_20241104" & speaker %in% c("S09") ~ "sp_medien_77", #brinkbäumer
+    show_id == "haf_20241104" & speaker %in% c("S01") ~ "sp_fdp_02", 
+    show_id == "haf_20241104" & speaker %in% c("S07") ~ "e_medien_01", 
+    show_id == "haf_20241104" & speaker %in% c("S05") ~ "e_ausl_08", 
+    ### 11.11.24
+    show_id == "haf_20241111" & speaker %in% c("S02", "S12") ~ "sp_host_04",                # Louis Klamroth (immer)
+    show_id == "haf_20241111" & speaker %in% c("S08") ~ "sp_fdp_03",                       # Wolfgang Kubicki, FDP
+    show_id == "haf_20241111" & speaker %in% c("S14") ~ "sp_csu_04",                       # Dorothee Bär, CSU
+    show_id == "haf_20241111" & speaker %in% c("S07") ~ "sp_spd_03",                       # Matthias Miersch, SPD
+    show_id == "haf_20241111" & speaker %in% c("S15") ~ "sp_medien_78",                    # Stefan Schulz, Medien
+    show_id == "haf_20241111" & speaker %in% c("S05") ~ "sp_medien_02",                    # Robin Alexander, Medien
+    show_id == "haf_20241111" & speaker %in% c("S13") ~ "sp_wirt_13",                      # Christina Böhm, Wirtschaft
+    show_id == "haf_20241111" & speaker %in% c("S06") ~ "sp_wirt_03",                      # Marcel Fratscher, Wirtschaft
+    show_id == "haf_20241111" & speaker %in% c("S18", "S01") ~ "e_medien_01", # Moderation, Einspieler
+    show_id == "haf_20241111" & speaker %in% c("S17") ~ "e_fdp_01", #lindner
+    show_id == "haf_20241111" & speaker %in% c("S16") ~ "e_spd_01", #lindner
+    show_id == "haf_20241111" & speaker %in% c("S04", "S03", "S10", "S00", "S11") ~ "e_unbekannt_01", # unbekannt
+    ### 18.11.24
+    show_id == "haf_20241118" & speaker %in% c("S03") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20241118" & speaker %in% c("S05") ~ "sp_wiss_35",                        # Eckart von Hirschhausen
+    show_id == "haf_20241118" & speaker %in% c("S16") ~ "sp_wiss_36",                # Klaus Stöhr, Wissenschaft
+    show_id == "haf_20241118" & speaker %in% c("S18") ~ "sp_medien_42",                      # Heribert Prantl, Medien
+    show_id == "haf_20241118" & speaker %in% c("S10") ~ "sp_wiss_37",                # Alena Buyx
+    show_id == "haf_20241118" & speaker %in% c("S06") ~ "sp_spd_01",                     # Karl Lauterbach
+    show_id == "haf_20241118" & speaker %in% c("S13") ~ "sp_oef_21",                         # Melanie Eckart, Öffentlichkeit
+    show_id == "haf_20241118" & speaker %in% c("S08") ~ "sp_oef_22",                         # Elena Lierk, Öffentlichkeit
+    show_id == "haf_20241118" & speaker %in% c("S11", "S04", "S15", "S10", "S02", "S00", "S17", "S09", "S01") ~ "e_medien_01", # Moderation, Einspieler
+    show_id == "haf_20241118" & speaker %in% c("S07", "S14", "S12") ~ "e_unbekannt_01",             # unbekannt
+    ### 25.11.24
+    show_id == "haf_20241125" & speaker %in% c("S11") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20241125" & speaker %in% c("S05", "S06") ~ "sp_cdu_09",                  # Norbert Röttgen, CDU
+    show_id == "haf_20241125" & speaker %in% c("S08") ~ "sp_gruene_02",                      # Felix Banaschak, Grüne
+    show_id == "haf_20241125" & speaker %in% c("S14") ~ "sp_medien_79",                      # Alev Dogan, Medien und Kultur
+    show_id == "haf_20241125" & speaker %in% c("S03") ~ "sp_spd_14",                         # Ralf Stegner, SPD
+    show_id == "haf_20241125" & speaker %in% c("S12") ~ "sp_link_05",                       # Ines Schwertner, Die Linke
+    show_id == "haf_20241125" & speaker %in% c("S15") ~ "sp_wiss_02",                # Nicole Deiteldorf, Wissenschaft
+    show_id == "haf_20241125" & speaker %in% c("S13", "S20", "S01", "S04", "S09", "S19", "S10", "S00", "S16") ~ "e_unbekannt_01", # unbekannt
+    show_id == "haf_20241125" & speaker %in% c("S02", "S18") ~ "e_cdu_01",                   # Friedrich Merz, Einspieler, CDU
+    show_id == "haf_20241125" & speaker %in% c("S17") ~ "e_gruene_02",                       # Habeck, Einspieler, Grüne
+    show_id == "haf_20241125" & speaker %in% c("S20") ~ "e_spd_01",                          # Scholz, SPD, Einspieler
+    show_id == "haf_20241125" & speaker %in% c("S07") ~ "e_ausl_02",                      # Putin, Einspieler, Ausland
+    # MONAT DEZ
+    ### 02.12.24
+    show_id == "haf_20241202" & speaker %in% c("S01") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20241202" & speaker %in% c("S04") ~ "sp_gruene_06",                      # Ricarda Lang, die Grünen
+    show_id == "haf_20241202" & speaker %in% c("S06") ~ "sp_medien_80",                      # Coleen Ulmen-Fernandes, Medien und Kultur
+    show_id == "haf_20241202" & speaker %in% c("S00") ~ "sp_medien_81",                      # Fikri Anil Altintas, Medien
+    show_id == "haf_20241202" & speaker %in% c("S02") ~ "sp_csu_04",                         # Dorothee Bär, CSU
+    show_id == "haf_20241202" & speaker %in% c("S05") ~ "sp_wiss_38",                # Frauke Rostalski, Wissenschaft
+    show_id == "haf_20241202" & speaker %in% c("S03") ~ "sp_oef_23",                         # Romy Stangl, Öffentlichkeit
+    ### 16.12.25
+    ### 16.12.24
+    show_id == "haf_20241216" & speaker %in% c("S10", "S09") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20241216" & speaker %in% c("S04") ~ "sp_cdu_25",                                # Rainer Haselhoff, CDU
+    show_id == "haf_20241216" & speaker %in% c("S14") ~ "sp_medien_12",                             # Melanie Amann, Medien
+    show_id == "haf_20241216" & speaker %in% c("S08") ~ "sp_fdp_01",                                # Christian Dürr, FDP
+    show_id == "haf_20241216" & speaker %in% c("S17", "S11") ~ "sp_link_01",                       # Gregor Gysi, Die Linke
+    show_id == "haf_20241216" & speaker %in% c("S06") ~ "sp_spd_05",                                # Saskia Esken, SPD
+    show_id == "haf_20241216" & speaker %in% c("S16") ~ "sp_oef_24",                                # Svenja Bolldorf, Öffentlichkeit
+    show_id == "haf_20241216" & speaker %in% c("S02") ~ "e_spd_01",                                 # Olaf, SPD, Einspieler
+    show_id == "haf_20241216" & speaker %in% c("S05") ~ "e_cdu_01",                                 # Merz, CDU, Einspieler
+    show_id == "haf_20241216" & speaker %in% c("S07") ~ "e_fdp_01",                                 # Lindner, FDP, Einspieler
+    show_id == "haf_20241216" & speaker %in% c("S08") ~ "e_gruene_02",                              # Habeck, Grüne, Einspieler
+    show_id == "haf_20241216" & speaker %in% c("S05", "S12", "S01", "S03", "S18", "S00", "S13", "S15") ~ "e_unbekannt_01", # unbekannt
+    # 2025
+    # MONAT JAN 
+    ### 13.01.25
+    show_id == "haf_20250113" & speaker %in% c("S08") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20250113" & speaker %in% c("S07") ~ "sp_cdu_08",                         # Jens Spahn, CDU
+    show_id == "haf_20250113" & speaker %in% c("S03") ~ "sp_fw_01",                # Tanja Schweiger, Freie Wähler
+    show_id == "haf_20250113" & speaker %in% c("S09") ~ "sp_medien_82",                      # Christoph Schwennicke, Medien
+    show_id == "haf_20250113" & speaker %in% c("S02") ~ "sp_gruene_10",                      # Kathrin Göring Eckart, Grüne
+    show_id == "haf_20250113" & speaker %in% c("S00") ~ "sp_wiss_39",                # Nahla Osman, Wissenschaft
+    show_id == "haf_20250113" & speaker %in% c("S10") ~ "sp_exp_15",                     # Frank Bräutigam, Experte
+    show_id == "haf_20250113" & speaker %in% c("S06") ~ "sp_oef_25",                         # Bardia Razavi, Öffentlichkeit
+    show_id == "haf_20250113" & speaker %in% c("S01") ~ "e_cdu_01",                          # Merz, CDU, Einspieler
+    show_id == "haf_20250113" & speaker %in% c("S04", "S05") ~ "e_unbekannt_01",             # unbekannt
+    ### 20.01.25
+    show_id == "haf_20250120" & speaker %in% c("S06") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20250120" & speaker %in% c("S07") ~ "sp_spd_01",                         # Karl Lauterbach, SPD
+    show_id == "haf_20250120" & speaker %in% c("S04") ~ "sp_medien_83",                      # Thomas Hayo, Medien und Kultur
+    show_id == "haf_20250120" & speaker %in% c("S05") ~ "sp_medien_01",                      # Markus Feldenkirchen, Medien und Kultur
+    show_id == "haf_20250120" & speaker %in% c("S08") ~ "sp_afd_04",                         # Rüdiger Lucassen, AfD
+    show_id == "haf_20250120" & speaker %in% c("S10") ~ "sp_wirt_14",                  # Sarna Röser, Wirtschaft
+    show_id == "haf_20250120" & speaker %in% c("S09", "S02") ~ "sp_medien_03",               # Juli Zeh, Medien und Kultur
+    show_id == "haf_20250120" & speaker %in% c("S01") ~ "e_ausl_01",                      # Donald Trump, Ausland, Einspieler
+    show_id == "haf_20250120" & speaker %in% c("S00", "S03") ~ "e_unbekannt_01",             # unbekannt
+    ### 27.01.25
+    show_id == "haf_20250127" & speaker %in% c("S04", "S05") ~ "sp_host_04",                        # Louis Klamroth (immer)
+    show_id == "haf_20250127" & speaker %in% c("S10") ~ "sp_gruene_01",                             # Franziska Brandtner, Die Grünen
+    show_id == "haf_20250127" & speaker %in% c("S02") ~ "sp_wirt_03",                         # Marcel Fratscher, Wirtschaft
+    show_id == "haf_20250127" & speaker %in% c("S11") ~ "sp_medien_84",                             # Anne-Catherine Beck, Medien und Kultur
+    show_id == "haf_20250127" & speaker %in% c("S08") ~ "sp_cdu_24",                                # Gitta Conneman, CDU
+    show_id == "haf_20250127" & speaker %in% c("S07") ~ "sp_wirt_15",                         # Mareike Boccola, Wirtschaft
+    show_id == "haf_20250127" & speaker %in% c("S09") ~ "sp_oef_26",                                # Manuela Valdiviesko, Öffentlichkeit
+    show_id == "haf_20250127" & speaker %in% c("S03", "S13", "S06") ~ "e_unbekannt_01",             # unbekannt
+    show_id == "haf_20250127" & speaker %in% c("S00") ~ "e_cdu_01",                                 # Merz, Einspieler, CDU
+    show_id == "haf_20250127" & speaker %in% c("S01") ~ "e_gruene_02",                              # Habeck, Einspieler, Die Grünen
+    show_id == "haf_20250127" & speaker %in% c("S12") ~ "e_medien_01",                              # Einspieler, Medien
+    # MONAT FEB
+    ### 03.02.25
+    show_id == "haf_20250203" & speaker %in% c("S02") ~ "sp_host_04",                              # Louis Klamroth (immer)
+    show_id == "haf_20250203" & speaker %in% c("S06") ~ "sp_afd_03",                               # Beatrice von Storch, AfD
+    show_id == "haf_20250203" & speaker %in% c("S07") ~ "sp_bsw_01",                               # Mohamed Ali, BSW
+    show_id == "haf_20250203" & speaker %in% c("S13") ~ "sp_spd_03",                               # Mirsch, SPD
+    show_id == "haf_20250203" & speaker %in% c("S05") ~ "sp_medien_85",                            # Isabel Schayani, Medien
+    show_id == "haf_20250203" & speaker %in% c("S15") ~ "sp_cdu_22",                               # Frey, CDU
+    show_id == "haf_20250203" & speaker %in% c("S03") ~ "sp_wiss_33",                            # Albrecht von Lucke, Medien
+    show_id == "haf_20250203" & speaker %in% c("S12") ~ "e_cdu_01",                                # Merz, Einspieler, CDU
+    show_id == "haf_20250203" & speaker %in% c("S10") ~ "e_cdu_10",                                # Friedman, Einspieler, CDU
+    show_id == "haf_20250203" & speaker %in% c("S08") ~ "e_spd_01",                                # Scholz, Einspieler, SPD
+    show_id == "haf_20250203" & speaker %in% c("S09") ~ "e_afd_01",                                # Bernd Baumann, Einspieler, AfD
+    show_id == "haf_20250203" & speaker %in% c("S11") ~ "e_afd_04",                                # Weidel, Einspieler, AfD
+    show_id == "haf_20250203" & speaker %in% c("S01") ~ "e_gruene_07",                             # Britta Haßelmann, Einspieler, Die Grünen
+    show_id == "haf_20250203" & speaker %in% c("S14") ~ "e_medien_01",                             # Einspieler, Medien
+    show_id == "haf_20250203" & speaker %in% c("S04", "S00") ~ "e_unbekannt_01",                   # unbekannt
+    ### 10.02.25
+    show_id == "haf_20250210" & speaker %in% c("S07") ~ "sp_host_04",                          # Louis Klamroth (immer)
+    show_id == "haf_20250210" & speaker %in% c("S05") ~ "sp_fdp_04",                           # Christian Lindner, FDP
+    show_id == "haf_20250210" & speaker %in% c("S04") ~ "sp_csu_04",                           # Dorothee Bär, CSU
+    show_id == "haf_20250210" & speaker %in% c("S08") ~ "sp_bsw_02",                           # Sahra Wagenknecht, BSW
+    show_id == "haf_20250210" & speaker %in% c("S06") ~ "sp_link_03",                         # Jan Van Aken, Die Linke
+    show_id == "haf_20250210" & speaker %in% c("S03") ~ "sp_oef_27",                           # Melanie, Öffentlichkeit
+    show_id == "haf_20250210" & speaker %in% c("S02") ~ "sp_oef_28",                           # Kateryna Rumyantseva, Öffentlichkeit
+    show_id == "haf_20250210" & speaker %in% c("S01", "S00") ~ "e_medien_01",                  # Einspieler, Medien
+    ))
+
+    missing_speakers_haf <- subset(transcripts_haf_v1, is.na(speaker_id)) ## alle Speaking Sequenzen codiert!
+```
+
+```{r}
+write.csv(transcripts_haf_v1, "haf_speaker.csv", row.names=FALSE)
+```
+
+
+### Join Datasets: Speaker + Transkripte
+
+```{r}
+# Data Shows
+library(readr)
+haf_speaker<- read_csv("haf_speaker.csv")
+
+
+# Data Excel Speaker infos
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+
+```
+
+
+```{r}
+# Join Datasets
+haf_dataframe <- haf_speaker %>%
+  left_join(speaker_infos, by = "speaker_id")
+
+write.csv(haf_dataframe , "haf_dataframe.csv", row.names=FALSE)
+```
+
+
+
+## Illner
+
+
+```{r}
+# Name of subdirectory
+project_dir <- here::here("data_transcripts")
+```
+
+```{r data-import}
+transcripts_illner_v1 <- list(
+    raw = fs::dir_ls(
+        path = here(project_dir, "illner"), 
+        glob = "*.txt"
+        ) %>%
+        # Read the files into the list
+        map(~ read_file(.)) %>%
+        # Set the list names to the base file names (without the path)
+        set_names(~ str_extract(basename(.), "^(.*)(?=\\.txt)"))
+)
+```
+
+
+```{r recode-data-transcripts-correct}
+transcripts_illner_v1$correct <- transcripts_illner_v1$raw %>% 
+    # Import and process each file
+    map(~ read_file(.) %>%
+            str_split("\n") %>%
+            .[[1]] %>%
+            tibble(line = .) %>%
+            mutate(
+                speaker = str_extract(line, "S\\d+"),  # Extract speaker 
+                timestamp = str_extract(line, "\\[\\d{2}:\\d{2}:\\d{2}\\]"),  # Extract timestamps
+                across(timestamp, ~str_remove_all(., "[\\[\\]]")),  # Remove the brackets from timestamp
+                dialogue = str_remove(line, "S\\d+ \\[\\d{2}:\\d{2}:\\d{2}\\]: "),  # Extract dialogue text
+                dialogue_length = nchar(dialogue),
+            ) %>% 
+            filter( # Filter out lines without speaker or dialogue
+                !is.na(speaker) &
+                !is.na(dialogue)
+                ) %>% 
+            mutate(
+                timestamp = hms::as_hms(timestamp),  # Convert timestamp to hms object
+                duration = as.numeric(difftime(lead(timestamp), timestamp, units = "secs"))  # Calculate duration
+            )
+    ) %>%
+    bind_rows(.id = "source") %>% 
+    mutate(
+        program = case_when(
+            str_detect(source, "Lanz") ~ "ZDF",
+            str_detect(source, "Illner") ~ "ZDF",
+            str_detect(source, "Hart_aber_fair") ~ "Das Erste",
+            TRUE ~ "unknown"
+        ), 
+        moderator = case_when(
+            str_detect(source, "Lanz")  ~ "Lanz",
+            str_detect(source, "Illner") ~ "Illner",
+            str_detect(source, "Hart_aber_fair") ~ "hart_aber_fair",
+            TRUE ~ "unknown"
+        ),
+        id_moderator = case_when(
+            moderator == "Lanz" ~ 1,
+            moderator == "Illner" ~ 2,
+            moderator == "hart_aber_fair" ~ 3,
+            TRUE ~ 0
+        ),
+        prefix = paste0(
+            ifelse(program == "ZDF", "ZDF", "ARD"),
+            id_moderator, "_"
+        ),
+        id_moderator = paste0(prefix, tolower(moderator))
+    ) %>%
+    mutate(
+        program_prefix = case_when(
+            program == "ZDF" ~ "Z",
+            program == "Das Erste" ~ "A",
+            TRUE ~ "U"
+        ),
+        moderator_prefix = case_when(
+            moderator == "Lanz" ~ "l",
+            moderator == "Illner" ~ "i",
+            moderator == "hart_aber_fair" ~ "haf",
+            TRUE ~ "u"
+        ),
+        id_speaker = paste0(program_prefix, moderator_prefix, source, "_", speaker)
+    ) %>%
+    select(-line, -prefix, -program_prefix, -moderator_prefix)
+
+
+
+## sort date
+transcripts_illner_v1$correct <- transcripts_illner_v1$correct %>%
+  mutate(
+    date_str = str_extract(source, "\\d{2}\\.\\d{2}\\.\\d{2}"),
+    date = dmy(date_str)
+  ) %>%
+  arrange(date)
+
+
+## drop unnecessary lines
+transcripts_illner_v1<- transcripts_illner_v1$correct %>%
+  select( -id_speaker)
+
+# create show id
+make_show_id <- function(source) {
+  # delete "Illner_"
+  datum <- sub("Illner_", "", source)
+  # delete Punkte (.)
+  datum <- gsub("\\.", "", datum)
+  # interprete date
+  paste0("illner_", format(as.Date(datum, "%d%m%y"), "%Y%m%d"))
+}
+
+
+transcripts_illner_v1$show_id <- make_show_id(transcripts_illner_v1$source)
+
+
+
+## create dialogue_id
+
+transcripts_illner_v1 <- transcripts_illner_v1 %>%
+  group_by(show_id) %>%
+  mutate(dialogue_id = sprintf("%s_d_%03d", show_id, row_number())) %>%
+  ungroup()
+
+# filter Sondersendungen
+transcripts_illner_v1 <- transcripts_illner_v1 %>%
+  filter(!source %in% c("Illner_24.10.24_S", "Illner_28.11.24_S", "Illner_06.06.24"))
+  
+
+
+write.csv(transcripts_illner_v1, "transcripts_illner_v1.csv", row.names=FALSE)
+```
+
+
+### Load both Datasets
+```{r}
+# Data Shows
+library(readr)
+transcripts_illner_v1 <- read_csv("transcripts_illner_v1.csv.csv")
+
+# Data Excel Speaker information
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+```
+
+
+
+### Speaker identification
+```{r}
+transcripts_illner_v1 <- transcripts_illner_v1 %>%
+  mutate(
+# Speaker_ID:
+    speaker_id = case_when (
+    # ILLNER
+    # MONAT APRIL
+    ### DATUM 11.04.24
+      show_id == "illner_20240411" & speaker == "S10" ~ "sp_host_01",            # Maybrit Illner, Moderation, w, Medien und Kultur
+  show_id == "illner_20240411" & speaker == "S04" ~ "sp_host_02",            # Moderator ZDF, Moderation, m, Medien und Kultur
+  show_id == "illner_20240411" & speaker == "S08" ~ "sp_ausland_01",         # Vitali Klitschko, Politik, Ausland, m, TN
+  show_id == "illner_20240411" & speaker == "S01" ~ "sp_spd_13",             # Kevin Kühnert, TN, m, Politik, SPD
+  show_id == "illner_20240411" & speaker == "S03" ~ "sp_link_02",           # Dietmar Bartsch, TN, m, Politik, Linke
+  show_id == "illner_20240411" & speaker == "S06" ~ "sp_exp_06",         # Claudia Major, TN, w, Experte
+  show_id == "illner_20240411" & speaker == "S02" ~ "sp_medien_05",          # Katrin Eigendorf, TN, w, Medien und Kultur
+  show_id == "illner_20240411" & speaker == "S07" ~ "e_unbekannt_01",        # Akteure unbekannt, Einspieler, d, Unbekannt
+    ### DATUM 18.04.24
+    show_id == "illner_20240418" & speaker %in% c("S04", "S03") ~ "sp_host_01",  # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240418" & speaker == "S09" ~ "sp_host_02",              # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240418" & speaker == "S06" ~ "sp_gruene_03",            # Omid Nouripour, TN, m, Politik, die Grünen
+    show_id == "illner_20240418" & speaker == "S08" ~ "sp_oef_04",              # Melody Sucharewicz, TN, w, Öffentlichkeit
+    show_id == "illner_20240418" & speaker == "S01" ~ "sp_oef_05",              # Abdul Kader Chahin, TN, m, Öffentlichkeit
+    show_id == "illner_20240418" & speaker == "S11" ~ "sp_medien_11",            # Düzen Tekkal, TN, w, Medien und Kultur
+    show_id == "illner_20240418" & speaker == "S10" ~ "sp_medien_25",            # Souad Mekhennet, TN, w, Medien und Kultur
+    show_id == "illner_20240418" & speaker %in% c("S00", "S02") ~ "e_unbekannt_01", # Akteure unbekannt, Einspieler, d, Unbekannt
+    show_id == "illner_20240418" & speaker == "S07" ~ "e_spd_01",                # Olaf Scholz, Einspieler, m, Politik, SPD, Regierung DE
+    show_id == "illner_20240418" & speaker %in% c("S02", "S12") ~ "e_gruene_06", # Annalena Baerbock, Einspieler, w, Politik, die Grünen, Regierung DE
+    ### DATUM 25.04.24
+    show_id == "illner_20240425" & speaker == "S09" ~ "sp_host_01",         # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240425" & speaker == "S00" ~ "sp_host_02",         # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240425" & speaker == "S05" ~ "sp_afd_01",          # Tino Chrupalla, TN, m, Politik, AfD
+    show_id == "illner_20240425" & speaker == "S03" ~ "sp_cdu_05",          # Armin Laschet, TN, m, Politik, CDU
+    show_id == "illner_20240425" & speaker == "S01" ~ "sp_wirt_02",   # Siegfried Russwurm, TN, m, Wirtschaft
+    show_id == "illner_20240425" & speaker == "S02" ~ "sp_medien_03",       # Juli Zeh, TN, w, Medien und Kultur
+    show_id == "illner_20240425" & speaker == "S06" ~ "sp_medien_12",       # Melanie Amann, TN, w, Medien und Kultur
+    show_id == "illner_20240425" & speaker %in% c("S08", "S04") ~ "e_unbekannt_01",  # Akteure unbekannt, Einspieler, d, Unbekannt
+    # MONAT MAI
+    ### DATUM 02.05.24
+    show_id == "illner_20240502" & speaker == "S04" ~ "sp_host_01",                # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240502" & speaker == "S02" ~ "sp_host_02",                # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240502" & speaker %in% c("S11", "S00") ~ "sp_fdp_04",     # Christian Lindner, TN, m, Politik, FDP, Regierung DE
+    show_id == "illner_20240502" & speaker == "S05" ~ "sp_gruene_06",              # Ricarda Lang, TN, w, Politik, Die Grünen
+    show_id == "illner_20240502" & speaker == "S03" ~ "sp_cdu_02",                 # Carsten Linnemann, TN, m, Politik, CDU
+    show_id == "illner_20240502" & speaker == "S12" ~ "sp_oef_03",                # Yasmin Fahimi, TN, w, Öffentlichkeit
+    show_id == "illner_20240502" & speaker %in% c("S08", "S07") ~ "sp_medien_27",  # Gabor Steingart, TN, m, Medien und Kultur
+    show_id == "illner_20240502" & speaker == "S09" ~ "e_gruene_02",               # Robert Habeck, Einspieler, m, Politik, die Grünen, Regierung DE
+    show_id == "illner_20240502" & speaker == "S06" ~ "e_spd_01",                  # Olaf Scholz, Einspieler, m, Politik, SPD, Regierung DE
+    show_id == "illner_20240502" & speaker %in% c("S01", "S10") ~ "e_unbekannt_01",  # Akteure unbekannt, Einspieler, d, Unbekannt
+    ### DATUM 16.05.24
+    show_id == "illner_20240516" & speaker == "S10" ~ "sp_host_01",           # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240516" & speaker %in% c("S07", "S08") ~ "sp_host_02",  # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240516" & speaker == "S05" ~ "sp_gruene_03",         # Omid Nouripour, TN, m, Politik, die Grünen
+    show_id == "illner_20240516" & speaker == "S03" ~ "sp_cdu_11",            # Herbert Reul, TN, m, Politik, CDU
+    show_id == "illner_20240516" & speaker == "S04" ~ "sp_medien_24",         # Ahmad Mansour, TN, m, Medien und Kultur
+    show_id == "illner_20240516" & speaker == "S09" ~ "sp_medien_25",         # Souad Mekhennet, TN, w, Medien und Kultur
+    show_id == "illner_20240516" & speaker == "S06" ~ "sp_medien_26",         # Ronen Steinke, TN, m, Medien und Kultur
+    show_id == "illner_20240516" & speaker == "S00" ~ "e_oef_02",            # Noam Petri, Einspieler, m, Öffentlichkeit
+    show_id == "illner_20240516" & speaker == "S01" ~ "e_exp_02",         # Felix Klein, Einspieler, m, Experte
+    show_id == "illner_20240516" & speaker == "S08" ~ "e_oeff_03",
+    show_id == "illner_20240516" & speaker %in% c("S02") ~ "e_unbekannt_01",            # Öffentlichkeit 1, Einspieler, w, Öffentlichkeit
+    ### DATUM 30.05.24
+    show_id == "illner_20240530" & speaker %in% c("S07") ~ "sp_host_01",       # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240530" & speaker %in% c("S06") ~ "sp_host_02",       # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240530" & speaker %in% c("S04") ~ "sp_cdu_10",        # Roderich Kiesewetter, TN, m, CDU, Politik
+    show_id == "illner_20240530" & speaker %in% c("S03") ~ "sp_spd_04",        # Sigmar Gabriel, TN, m, Politik, SPD
+    show_id == "illner_20240530" & speaker %in% c("S09", "S01") ~ "sp_exp_03", # Mychajlo Podoljak, TN, m, Experte, Regierung Ausland Berater
+    show_id == "illner_20240530" & speaker %in% c("S08") ~ "sp_wiss_14",       # Sabine Fischer, TN, w, Wissenschaft
+    show_id == "illner_20240530" & speaker %in% c("S02") ~ "sp_exp_07",    # Ben Hodges, TN, m, Experte
+    show_id == "illner_20240530" & speaker %in% c("S00") ~ "e_spd_01",         # Olaf Scholz, Einspieler, m, Politik, SPD, Regierung DE
+    # MONAT JUNI
+    ### DATUM 13.06.24
+    show_id == "illner_20240613" & speaker %in% c("S02", "S11", "S05") ~ "sp_host_01", # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240613" & speaker %in% c("S04") ~ "sp_host_02",               # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240613" & speaker %in% c("S06") ~ "sp_spd_02",                # Lars Klingbeil, TN, m, Politik, SPD
+    show_id == "illner_20240613" & speaker %in% c("S07") ~ "sp_cdu_09",                # Norbert Röttgen, TN, m, Politik, CDU
+    show_id == "illner_20240613" & speaker %in% c("S10") ~ "sp_bsw_01",                # Amira Mohamed Ali, TN, w, Politik, BSW
+    show_id == "illner_20240613" & speaker %in% c("S00") ~ "sp_exp_04",            # Wolfgang Ischinger, TN, m, Experte
+    show_id == "illner_20240613" & speaker %in% c("S08") ~ "sp_wiss_02",               # Nicole Deitelhoff, TN, w, Wissenschaft
+    show_id == "illner_20240613" & speaker %in% c("S01") ~ "e_medien_02",              # Thomas Walde, Einspieler, m, Medien und Kultur
+    ### DATUM 27.06.24
+    show_id == "illner_20240627" & speaker %in% c("S02", "S03") ~ "sp_host_01", # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240627" & speaker %in% c("S10") ~ "sp_host_02",        # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240627" & speaker %in% c("S13") ~ "sp_spd_11",         # Malu Dreyer, TN, w, Politik, SPD
+    show_id == "illner_20240627" & speaker %in% c("S09") ~ "sp_wiss_13",        # Christian Drosten, TN, m, Wissenschaft
+    show_id == "illner_20240627" & speaker %in% c("S08") ~ "sp_medien_20",      # Jan Josef Liefers, TN, m, Medien und Kultur
+    show_id == "illner_20240627" & speaker %in% c("S00") ~ "sp_medien_21",      # Georg Mascolo, TN, m, Medien und Kultur
+    show_id == "illner_20240627" & speaker %in% c("S12") ~ "e_cdu_05",          # Angela Merkel, Einspieler, w, CDU, Politik
+    show_id == "illner_20240627" & speaker %in% c("S05") ~ "e_cdu_06",          # Thorsten Frei, Einspieler, m, CDU, Politik
+    show_id == "illner_20240627" & speaker %in% c("S04") ~ "e_cdu_07",          # Armin Laschet, Einspieler, m, CDU, Politik
+    show_id == "illner_20240627" & speaker %in% c("S07") ~ "e_wiss_02",         # Wissenschaftler 1, Einspieler, m, Wissenschaft
+    show_id == "illner_20240627" & speaker %in% c("S06") ~ "e_spd_01",          # Olaf Scholz, Einspieler, m, Politik, SPD, Regierung DE
+    show_id == "illner_20240627" & speaker %in% c("S01") ~ "e_wiss_03",         # Michael Meyer-Herrmann, Einspieler, m, Wissenschaft
+    show_id == "illner_20240627" & speaker %in% c("S11") ~ "e_medien_01",       # Moderatorin ZDF, Einspieler, w, Medien und Kultur
+    # MONAT JULI
+    ### DATUM 04.07.24
+    show_id == "illner_20240704" & speaker %in% c("S08", "S07") ~ "sp_host_01",       # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240704" & speaker %in% c("S01") ~ "sp_host_02",       # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240704" & speaker %in% c("S02") ~ "sp_spd_10",        # Michael Roth, TN, m, Politik, SPD
+    show_id == "illner_20240704" & speaker %in% c("S03") ~ "sp_cdu_09",        # Norbert Röttgen, TN, m, Politik, CDU
+    show_id == "illner_20240704" & speaker %in% c("S05") ~ "sp_exp_08",    # Constanze Stelzenmüller, TN, w, Experte
+    show_id == "illner_20240704" & speaker %in% c("S06") ~ "sp_wiss_12",       # Daniela Schwarzer, TN, w, Wissenschaft
+    show_id == "illner_20240704" & speaker %in% c("S04") ~ "sp_medien_08",     # Frederik Pleitgen, TN, m, Medien und Kultur
+    ### DATUM 11.07.24
+    show_id == "illner_20240711" & speaker %in% c("S06") ~ "sp_host_01",       # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240711" & speaker %in% c("S03") ~ "sp_host_02",       # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240711" & speaker %in% c("S09") ~ "sp_gruene_03",     # Omid Nouripour, TN, m, Politik, die Grünen
+    show_id == "illner_20240711" & speaker %in% c("S07") ~ "sp_bsw_02",        # Sahra Wagenknecht, TN, w, Politik, BSW
+    show_id == "illner_20240711" & speaker %in% c("S04") ~ "sp_exp_06",    # Claudia Major, TN, w, Experte
+    show_id == "illner_20240711" & speaker %in% c("S05") ~ "sp_exp_07",    # Ben Hodges, TN, m, Experte
+    show_id == "illner_20240711" & speaker %in% c("S10") ~ "sp_medien_19",     # Claus Kleber, TN, m, Medien und Kultur
+    show_id == "illner_20240711" & speaker %in% c("S00") ~ "e_spd_01",         # Olaf Scholz, Einspieler, m, Politik, SPD, Regierung DE
+    show_id == "illner_20240711" & speaker %in% c("S02") ~ "e_spd_02",         # Lars Klingbeil, Einspieler, m, Politik, SPD
+    show_id == "illner_20240711" & speaker %in% c("S01") ~ "e_spd_04",         # Boris Pistorius, Einspieler, m, Politik, SPD, Regierung DE
+    ### DATUM 18.07.24
+    show_id == "illner_20240718" & speaker %in% c("S06") ~ "sp_host_01",       # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240718" & speaker %in% c("S03", "S04") ~ "sp_host_02",       # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240718" & speaker %in% c("S00") ~ "sp_medien_16",        # Ruprecht Polenz, TN, m, Medien und Kultur, CDU
+    show_id == "illner_20240718" & speaker %in% c("S05") ~ "sp_wiss_10",       # Peter Neumann, TN, m, Wissenschaft
+    show_id == "illner_20240718" & speaker %in% c("S02") ~ "sp_medien_17",     # Annika Brockschmidt, TN, w, Medien und Kultur
+    show_id == "illner_20240718" & speaker %in% c("S01") ~ "sp_exp_04",    # Wolfgang Ischinger, TN, m, Experte
+    show_id == "illner_20240718" & speaker %in% c("S08") ~ "sp_wiss_11",       # Liana Fix, TN, w, Wissenschaft
+    show_id == "illner_20240718" & speaker %in% c("S07") ~ "sp_medien_18",     # Katharina Nocun, TN, w, Medien und Kultur
+    ### DATUM 25.07.24
+    show_id == "illner_20240725" & speaker %in% c("S05", "S06") ~ "sp_host_01",   # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240725" & speaker %in% c("S01") ~ "sp_host_02",          # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240725" & speaker %in% c("S07") ~ "sp_spd_09",           # Hubertus Heil, TN, m, Politik, SPD, Regierung DE
+    show_id == "illner_20240725" & speaker %in% c("S08") ~ "sp_cdu_08",           # Jens Spahn, TN, m, Politik, CDU
+    show_id == "illner_20240725" & speaker %in% c("S00") ~ "sp_oef_02",          # Constance Chucholowski, TN, w, Öffentlichkeit
+    show_id == "illner_20240725" & speaker %in% c("S02") ~ "sp_wiss_03",          # Adam Tooze, TN, m, Wissenschaft
+    show_id == "illner_20240725" & speaker %in% c("S03") ~ "sp_medien_08",        # Frederik Pleitgen, TN, m, Medien und Kultur
+    show_id == "illner_20240725" & speaker %in% c("S04") ~ "e_ausl_01",           # Donald Trump, Einspieler, m, Politik
+    # MONAT SEPT 24
+    ### DATUM 05.09.24
+    show_id == "illner_20240905" & speaker %in% c("S07") ~ "sp_host_01",         # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240905" & speaker %in% c("S08") ~ "sp_host_02",         # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240905" & speaker %in% c("S03") ~ "sp_spd_08",          # Stephan Weil, TN, m, Politik, SPD
+    show_id == "illner_20240905" & speaker %in% c("S06") ~ "sp_gruene_05",       # Katharina Dröge, TN, w, Politik, Die Grünen
+    show_id == "illner_20240905" & speaker %in% c("S04") ~ "sp_cdu_07",          # Wolfgang Bosbach, TN, m, Politik, CDU
+    show_id == "illner_20240905" & speaker %in% c("S05") ~ "sp_bsw_01",          # Amira Mohamed Ali, TN, w, Politik, BSW
+    show_id == "illner_20240905" & speaker %in% c("S02") ~ "sp_medien_03",       # Juli Zeh, TN, w, Medien und Kultur
+    show_id == "illner_20240905" & speaker %in% c("S09") ~ "e_cdu_03",           # Jens Spahn, Einspieler, m, Politik, CDU
+    show_id == "illner_20240905" & speaker %in% c("S10") ~ "e_bsw_01",           # Sahra Wagenknecht, Einspieler, w, Politik, BSW
+    show_id == "illner_20240905" & speaker %in% c("S00") ~ "e_cdu_01",           # Friedrich Merz, Einspieler, m, Politik, CDU
+    show_id == "illner_20240905" & speaker %in% c("S01") ~ "e_cdu_04",           # CDU Politiker, Einspieler, m, Politik, CDU
+    ### DATUM 12.09.24
+    show_id == "illner_20240912" & speaker %in% c("S02") ~ "sp_host_01",         # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240912" & speaker %in% c("S09") ~ "sp_host_02",         # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240912" & speaker %in% c("S04") ~ "sp_spd_07",          # Nancy Faeser, TN, w, Politik, SPD, Regierung DE
+    show_id == "illner_20240912" & speaker %in% c("S07") ~ "sp_gruene_06",       # Ricarda Lang, TN, w, Politik, Die Grünen
+    show_id == "illner_20240912" & speaker %in% c("S10") ~ "sp_cdu_02",          # Carsten Linnemann, TN, m, Politik, CDU
+    show_id == "illner_20240912" & speaker %in% c("S11") ~ "sp_medien_14",       # Tina Hildebrandt, TN, w, Medien und Kultur
+    show_id == "illner_20240912" & speaker %in% c("S03") ~ "sp_medien_15",       # Dagmar Rosenfeld, TN, w, Medien und Kultur
+    show_id == "illner_20240912" & speaker %in% c("S05", "S06") ~ "e_spd_01",    # Olaf Scholz, Einspieler, m, Politik, Regierung DE, SPD
+    show_id == "illner_20240912" & speaker %in% c("S00") ~ "e_cdu_01",           # Friedrich Merz, Einspieler, m, Politik, CDU
+    show_id == "illner_20240912" & speaker %in% c("S08") ~ "e_fdp_02",           # Marco Buschmann, Einspieler, m, Politik, FDP, Regierung DE
+    ### DATUM 19.09.24
+    show_id == "illner_20240919" & speaker %in% c("S11", "S02") ~ "sp_host_01",       # Maybrit Illner, Moderation, w, Medien und Kultur
+    show_id == "illner_20240919" & speaker %in% c("S07") ~ "sp_host_02",             # Moderator ZDF, Moderation, m, Medien und Kultur
+    show_id == "illner_20240919" & speaker %in% c("S10") ~ "sp_fdp_02",              # Marie-Agnes Strack-Zimmermann, TN, w, Politik, FDP, EU
+    show_id == "illner_20240919" & speaker %in% c("S06") ~ "sp_exp_03",          # Mychajlo Podoljak, TN, m, Politik, Regierung Ausland Berater
+    show_id == "illner_20240919" & speaker %in% c("S08") ~ "sp_link_01",            # Gregor Gysi, TN, m, Politik, Die Linke
+    show_id == "illner_20240919" & speaker %in% c("S04") ~ "sp_exp_04",          # Wolfgang Ischinger, TN, m, Experte
+    show_id == "illner_20240919" & speaker %in% c("S05") ~ "sp_exp_05",          # Frank Sauer, TN, m, Experte
+    show_id == "illner_20240919" & speaker %in% c("S09") ~ "sp_medien_13",           # Sabine Adler, TN, w, Medien und Kultur
+    show_id == "illner_20240919" & speaker %in% c("S01") ~ "e_spd_01",               # Olaf Scholz, Einspieler, m, Politik, Regierung DE, SPD
+    ### DATUM 26.09.24
+    show_id == "illner_20240926" & speaker %in% c("S06") ~ "sp_host_01",
+    show_id == "illner_20240926" & speaker %in% c("S02") ~ "sp_host_02",
+    show_id == "illner_20240926" & speaker %in% c("S13", "S14") ~ "sp_cdu_06",
+    show_id == "illner_20240926" & speaker %in% c("S05") ~ "sp_spd_06",
+    show_id == "illner_20240926" & speaker %in% c("S04") ~ "sp_gruene_05",
+    show_id == "illner_20240926" & speaker %in% c("S03") ~ "sp_medien_12",
+    show_id == "illner_20240926" & speaker %in% c("S11") ~ "sp_wiss_09",
+    show_id == "illner_20240926" & speaker %in% c("S10") ~ "e_gruene_04",
+    show_id == "illner_20240926" & speaker %in% c("S09") ~ "e_spd_01",
+    show_id == "illner_20240926" & speaker %in% c("S12") ~ "e_spd_02",         # Dietmar Woidke, Einspieler, m, Politik, SPD
+    show_id == "illner_20240926" & speaker %in% c("S15") ~ "e_cdu_02",         # Carsten Linnemann, Einspieler, m, Politik, CDU
+    show_id == "illner_20240926" & speaker %in% c("S01") ~ "e_fdp_01",         # Christian Lindner, Einspieler, m, Politik, Regierung DE, FDP
+    show_id == "illner_20240926" & speaker %in% c("S00") ~ "e_spd_03",         # Lars Klingbeil, Einspieler, m, Politik, SPD
+    show_id == "illner_20240926" & speaker %in% c("S08") ~ "e_gruene_01",      # Ricarda Lang, Einspieler, w, Politik, Die Grünen
+    ## MONAT OKT 24
+    ### DATUM 10.10.24
+    show_id == "illner_20241010" & speaker %in% c("S08", "S09") ~ "sp_host_01",
+    show_id == "illner_20241010" & speaker %in% c("S05") ~ "sp_host_02",
+    show_id == "illner_20241010" & speaker %in% c("S02") ~ "sp_spd_02",
+    show_id == "illner_20241010" & speaker %in% c("S06") ~ "sp_medien_11",
+    show_id == "illner_20241010" & speaker %in% c("S04") ~ "sp_cdu_05",
+    show_id == "illner_20241010" & speaker %in% c("S07") ~ "sp_wiss_02",
+    show_id == "illner_20241010" & speaker %in% c("S03") ~ "sp_wiss_08",
+    show_id == "illner_20241010" & speaker %in% c("S00", "S01") ~ "e_spd_01",
+    ### DATUM 17.10.24
+    show_id == "illner_20241017" & speaker %in% c("S12") ~ "sp_host_01",
+    show_id == "illner_20241017" & speaker %in% c("S08") ~ "sp_host_02",
+    show_id == "illner_20241017" & speaker %in% c("S06") ~ "sp_gruene_03",
+    show_id == "illner_20241017" & speaker %in% c("S00", "S01") ~ "sp_cdu_04",
+    show_id == "illner_20241017" & speaker %in% c("S07") ~ "sp_wiss_07",
+    show_id == "illner_20241017" & speaker %in% c("S09") ~ "sp_medien_09",
+    show_id == "illner_20241017" & speaker %in% c("S02") ~ "sp_medien_10",
+    show_id == "illner_20241017" & speaker %in% c("S03") ~ "sp_exp_02",
+    show_id == "illner_20241017" & speaker %in% c("S04") ~ "e_csu_02",
+    ### DATUM 31.10.24
+    show_id == "illner_20241031" & speaker %in% c("S05") ~ "sp_host_01",
+    show_id == "illner_20241031" & speaker %in% c("S12", "S14") ~ "sp_host_02",
+    show_id == "illner_20241031" & speaker %in% c("S16") ~ "sp_spd_05",
+    show_id == "illner_20241031" & speaker %in% c("S04") ~ "sp_fdp_01",
+    show_id == "illner_20241031" & speaker %in% c("S02", "S03", "S18") ~ "sp_cdu_03",
+    show_id == "illner_20241031" & speaker %in% c("S06") ~ "sp_oef_01",
+    show_id == "illner_20241031" & speaker %in% c("S15") ~ "sp_wirt_01",
+    show_id == "illner_20241031" & speaker %in% c("S08") ~ "e_fdp_01",
+    show_id == "illner_20241031" & speaker %in% c("S11") ~ "e_gruene_02",
+    show_id == "illner_20241031" & speaker %in% c("S09") ~ "e_spd_01",
+    show_id == "illner_20241031" & speaker %in% c("S10") ~ "e_oef_01",
+    show_id == "illner_20241031" & speaker %in% c("S00") ~ "e_gruene_03",
+    show_id == "illner_20241031" & speaker %in% c("S01") ~ "e_exp_01",
+    show_id == "illner_20241031" & speaker %in% c("S13") ~ "e_wiss_01",
+    ## MONAT NOV 24
+    ### DATUM 07.11.24
+    show_id == "illner_20241107" & speaker %in% c("S09", "S08") ~ "sp_host_01",
+    show_id == "illner_20241107" & speaker %in% c("S03") ~ "sp_host_02",
+    show_id == "illner_20241107" & speaker %in% c("S06", "S07") ~ "sp_cdu_01",
+    show_id == "illner_20241107" & speaker %in% c("S04") ~ "sp_spd_04",
+    show_id == "illner_20241107" & speaker %in% c("S01") ~ "sp_wiss_06",
+    show_id == "illner_20241107" & speaker %in% c("S05") ~ "sp_medien_08",
+    show_id == "illner_20241107" & speaker %in% c("S00") ~ "e_spd_01",
+    show_id == "illner_20241107" & speaker %in% c("S02") ~ "e_fdp_01",
+    ### DATUM 14.11.24
+    show_id == "illner_20241114" & speaker %in% c("S04")  ~  "sp_host_01",
+    show_id == "illner_20241114" & speaker %in% c("S00") ~ "sp_host_02",
+    show_id == "illner_20241114" & speaker %in% c("S13") ~ "sp_spd_03",
+    show_id == "illner_20241114" & speaker %in% c("S14") ~ "sp_cdu_02",
+    show_id == "illner_20241114" & speaker %in% c("S09", "S08") ~ "sp_medien_02",
+    show_id == "illner_20241114" & speaker %in% c("S03") ~ "sp_medien_07",
+    show_id == "illner_20241114" & speaker %in% c("S02") ~ "sp_wiss_05",
+    show_id == "illner_20241114" & speaker %in% c("S10") ~ "e_fdp_01",
+    show_id == "illner_20241114" & speaker %in% c("S07") ~ "e_spd_01",
+    show_id == "illner_20241114" & speaker %in% c("S11") ~ "e_cdu_01",
+    show_id == "illner_20241114" & speaker %in% c("S06", "S05") ~ "e_gruene_02",
+    ### DATUM 21.11.24
+    show_id == "illner_20241121" & speaker %in% c("S04")  ~ "sp_host_01",
+    show_id == "illner_20241121" & speaker %in% c("S01") ~ "sp_host_02",
+    show_id == "illner_20241121" & speaker %in% c("S09") ~ "sp_spd_01",
+    show_id == "illner_20241121" & speaker %in% c("S02") ~ "sp_gruene_01",
+    show_id == "illner_20241121" & speaker %in% c("S07") ~ "sp_csu_01",
+    show_id == "illner_20241121" & speaker %in% c("S06") ~ "sp_medien_01",
+    show_id == "illner_20241121" & speaker %in% c("S03") ~ "sp_wiss_04",
+    show_id == "illner_20241121" & speaker %in% c("S00") ~ "e_gruene_02",
+    show_id == "illner_20241121" & speaker %in% c("S05") ~ "e_spd_04",
+    ## MONAT DEZ 24
+    ### DATUM 05.12.24
+    show_id == "illner_20241205" & speaker %in% c("S06")  ~  "sp_host_01",
+    show_id == "illner_20241205" & speaker %in% c("S02") ~ "sp_host_02",
+    show_id == "illner_20241205" & speaker %in% c("S04") ~ "sp_gruene_04",
+    show_id == "illner_20241205" & speaker %in% c("S03") ~ "sp_wiss_01",
+    show_id == "illner_20241205" & speaker %in% c("S05") ~ "sp_wiss_02",
+    show_id == "illner_20241205" & speaker %in% c("S08") ~ "sp_wiss_03",
+    show_id == "illner_20241205" & speaker %in% c("S00") ~ "e_spd_01",
+    show_id == "illner_20241205" & speaker %in% c("S01") ~ "e_fdp_01",
+    ### DATUM 12.12.24
+    show_id == "illner_20241212" & speaker %in% c("S08", "S09")  ~  "sp_host_01",
+    show_id == "illner_20241212" & speaker %in% c("S03") ~ "sp_host_02",
+    show_id == "illner_20241212" & speaker %in% c("S04") ~ "sp_csu_02",
+    show_id == "illner_20241212" & speaker %in% c("S02") ~ "sp_gruene_03",
+    show_id == "illner_20241212" & speaker %in% c("S05", "S06") ~ "sp_exp_01",
+    show_id == "illner_20241212" & speaker %in% c("S10") ~ "sp_medien_05",
+    show_id == "illner_20241212" & speaker %in% c("S07") ~ "sp_medien_06",
+    show_id == "illner_20241212" & speaker %in% c("S01") ~ "e_spd_01",
+    show_id == "illner_20241212" & speaker %in% c("S00") ~ "e_cdu_01",
+    ### DATUM 19.12.24
+    show_id == "illner_20241219" & speaker %in% c("S08", "S02")  ~  "sp_host_01",
+    show_id == "illner_20241219" & speaker %in% c("S05") ~ "sp_host_02",
+    show_id == "illner_20241219" & speaker %in% c("S09") ~ "sp_spd_02",
+    show_id == "illner_20241219" & speaker %in% c("S07", "S06", "S12") ~ "sp_gruene_02",
+    show_id == "illner_20241219" & speaker %in% c("S11") ~ "sp_csu_01",
+    show_id == "illner_20241219" & speaker %in% c("S04") ~ "sp_medien_03",
+    show_id == "illner_20241219" & speaker %in% c("S03") ~ "sp_medien_04",
+    show_id == "illner_20241219" & speaker %in% c("S10") ~ "e_spd_01",
+    show_id == "illner_20241219" & speaker %in% c("S01") ~ "e_csu_01",
+    show_id == "illner_20241219" & speaker %in% c("S00") ~ "e_gruene_01",
+    ## MONAT JAN 25
+    ### DATUM 16.01.25
+    show_id == "illner_20250116" & speaker == "S05" ~ "sp_host_01",           # Maybrit Illner, Moderatorin, w, NaN
+    show_id == "illner_20250116" & speaker %in% c("S04", "S02") ~ "sp_host_02", # Moderator ZDF, Moderator, NaN, NaN
+    show_id == "illner_20250116" & speaker == "S08" ~ "sp_medien_22",            # Elmar Theveßen, ZDF Korrespondent, m, NaN
+    show_id == "illner_20250116" & speaker == "S07" ~ "sp_cdu_09",            # Norbert Röttgen, Politiker:in, m, CDU
+    show_id == "illner_20250116" & speaker == "S00" ~ "sp_gruene_06",         # Ricarda Lang, Politiker:in, w, Die Grünen
+    show_id == "illner_20250116" & speaker == "S03" ~ "sp_exp_04",        # Wolfgang Ischinger, Experte, m, NaN
+    show_id == "illner_20250116" & speaker == "S06" ~ "sp_exp_09",        # Achim Berg, Experte, m, NaN
+    show_id == "illner_20250116" & speaker == "S01" ~ "e_cdu_01",             # Friedrich Merz, Politiker:in, m, CDU
+    ### DATUM 23.02.25
+    show_id == "illner_20250123" & speaker == "S09" ~ "sp_host_01",           # Maybrit Illner, Moderatorin, w, NaN
+    show_id == "illner_20250123" & speaker == "S00" ~ "sp_host_02",           # Moderator ZDF, Moderator, NaN, NaN
+    show_id == "illner_20250123" & speaker == "S05" ~ "sp_medien_19",          # Claus Kleber, Autor, m, NaN
+    show_id == "illner_20250123" & speaker == "S02" ~ "sp_medien_12",   # Melanie Amann, Journalismus, w, NaN
+    show_id == "illner_20250123" & speaker == "S08" ~ "sp_spd_12",            # Wolfgang Schmidt, Politiker:in, m, SPD
+    show_id == "illner_20250123" & speaker == "S06" ~ "sp_cdu_08",            # Jens Spahn, Politiker:in, m, CDU
+    show_id == "illner_20250123" & speaker == "S04" ~ "sp_exp_10",        # Florian Neuhann, Experte, m, NaN
+    show_id == "illner_20250123" & speaker == "S07" ~ "e_cdu_01",             # Friedrich Merz, Politiker:in, m, CDU
+    ### DATUM 30.01.25
+    show_id == "illner_20250130" & speaker == "S10" ~ "sp_host_01",          # Maybrit Illner, Moderatorin, w, NaN
+    show_id == "illner_20250130" & speaker == "S09" ~ "sp_host_02",          # Moderator ZDF, Moderator, NaN, NaN
+    show_id == "illner_20250130" & speaker == "S08" ~ "sp_gruene_04",        # Robert Habeck, Politiker:in, m, Die Grünen
+    show_id == "illner_20250130" & speaker %in% c("S02", "S05") ~ "sp_cdu_02", # Carsten Linnemann, Politiker:in, m, CDU
+    show_id == "illner_20250130" & speaker == "S04" ~ "sp_medien_23",  # Giovanni di Lorenzo, Journalismus, m, NaN
+    show_id == "illner_20250130" & speaker == "S00" ~ "sp_exp_02",       # Sarah Tacke, Experte, w, NaN
+    show_id == "illner_20250130" & speaker == "S03" ~ "e_spd_01",            # Olaf Scholz, Politiker:in, m, SPD
+    show_id == "illner_20250130" & speaker == "S07" ~ "e_cdu_01",            # Friedrich Merz, Politiker:in, m, CDU
+    show_id == "illner_20250130" & speaker == "S01" ~ "e_gruene_05",         # Kathrin Göring-Eckart, Politiker:in, w, Die Grünen
+    show_id == "illner_20250130" & speaker == "S06" ~ "e_afd_01",            # Bernd Baumann, Politiker:in, m, AfD
+    ## MONAT FEB 25
+    ### DATUM 13.02.25
+    show_id == "illner_20250213" & speaker %in% c("S11", "S02") ~ "sp_host_01",    # Maybrit Illner, Moderatorin, w, NaN
+    show_id == "illner_20250213" & speaker == "S07" ~ "sp_host_02",                 # Moderator ZDF, Moderator, NaN, NaN
+    show_id == "illner_20250213" & speaker == "S08" ~ "sp_link_01",                # Gregor Gysi, Politiker:in, m, Die Linke
+    show_id == "illner_20250213" & speaker == "S00" ~ "sp_csu_01",                  # Alexander Dobrindt, Politiker:in, m, CSU
+    show_id == "illner_20250213" & speaker %in% c("S10", "S09") ~ "sp_bsw_02",      # Sarah Wagenknecht, Politiker:in, w, BSW
+    show_id == "illner_20250213" & speaker == "S05" ~ "sp_fdp_03",                  # Wolfgang Kubicki, Politiker:in, m, FDP
+    show_id == "illner_20250213" & speaker == "S06" ~ "sp_medien_15",         # Dagmar Rosenfeld, Journalismus, w, NaN
+    show_id == "illner_20250213" & speaker == "S04" ~ "e_cdu_01",                   # Friedrich Merz, Politiker:in, m, CDU
+    show_id == "illner_20250213" & speaker == "S01" ~ "e_medien_03",             # Markus Lanz, Moderator, m, NaN
+)
+  )
+
+
+missing_speakers <- subset(transcripts_illner_v1, is.na(speaker_id)) 
+```
+
+```{r}
+write.csv(transcripts_illner_v1, "illner_speaker_all.csv", row.names=FALSE)
+```
+
+
+### Join Datasets 
+
+```{r}
+# Data Shows
+library(readr)
+illner_speaker_all<- read_csv("illner_speaker_all.csv")
+
+
+# Data Excel Speaker infos
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+
+```
+
+
+```{r}
+# Join Datasets:
+illner_dataframe <- illner_speaker_all %>%
+  left_join(speaker_infos, by = "speaker_id")
+
+write.csv(illner_dataframe , "illner_dataframe.csv", row.names=FALSE)
+```
+
+
+## Lanz
+
+```{r}
+# Name of subdirectory 
+project_dir <- here::here("data_transcripts")
+```
+
+```{r data-import}
+transcripts_lanz_v1 <- list(
+    raw = fs::dir_ls(
+        path = "E:/02_leuner/bachelorarbeit_talkshows/data_transcripts/lanz/lanz_do", 
+        glob = "*.txt"
+        ) %>%
+        # Read the files into the list
+        map(~ read_file(.)) %>%
+        # Set the list names to the base file names (without the path)
+        set_names(~ str_extract(basename(.), "^(.*)(?=\\.txt)"))
+)
+```
+
+
+```{r recode-data-transcripts-correct}
+transcripts_lanz_v1$correct <- transcripts_lanz_v1$raw %>% 
+    # Import and process each file
+    map(~ read_file(.) %>%
+            str_split("\n") %>%
+            .[[1]] %>%
+            tibble(line = .) %>%
+            mutate(
+                speaker = str_extract(line, "S\\d+"),  # Extract speaker 
+                timestamp = str_extract(line, "\\[\\d{2}:\\d{2}:\\d{2}\\]"),  # Extract timestamps
+                across(timestamp, ~str_remove_all(., "[\\[\\]]")),  # Remove the brackets from timestamp
+                dialogue = str_remove(line, "S\\d+ \\[\\d{2}:\\d{2}:\\d{2}\\]: "),  # Extract dialogue text
+                dialogue_length = nchar(dialogue),
+            ) %>% 
+            filter( # Filter out lines without speaker or dialogue
+                !is.na(speaker) &
+                !is.na(dialogue)
+                ) %>% 
+            mutate(
+                timestamp = hms::as_hms(timestamp),  # Convert timestamp to hms object
+                duration = as.numeric(difftime(lead(timestamp), timestamp, units = "secs"))  # Calculate duration
+            )
+    ) %>%
+    bind_rows(.id = "source") %>% 
+    mutate(
+        program = case_when(
+            str_detect(source, "Lanz") ~ "ZDF",
+            str_detect(source, "Illner") ~ "ZDF",
+            str_detect(source, "Hart_aber_fair") ~ "Das Erste",
+            TRUE ~ "unknown"
+        ), 
+        moderator = case_when(
+            str_detect(source, "Lanz")  ~ "Lanz",
+            str_detect(source, "Illner") ~ "Illner",
+            str_detect(source, "Hart_aber_fair") ~ "hart_aber_fair",
+            TRUE ~ "unknown"
+        ),
+        id_moderator = case_when(
+            moderator == "Lanz" ~ 1,
+            moderator == "Illner" ~ 2,
+            moderator == "hart_aber_fair" ~ 3,
+            TRUE ~ 0
+        ),
+        prefix = paste0(
+            ifelse(program == "ZDF", "ZDF", "ARD"),
+            id_moderator, "_"
+        ),
+        id_moderator = paste0(prefix, tolower(moderator))
+    ) %>%
+    mutate(
+        program_prefix = case_when(
+            program == "ZDF" ~ "Z",
+            program == "Das Erste" ~ "A",
+            TRUE ~ "U"
+        ),
+        moderator_prefix = case_when(
+            moderator == "Lanz" ~ "l",
+            moderator == "Illner" ~ "i",
+            moderator == "hart_aber_fair" ~ "haf",
+            TRUE ~ "u"
+        ),
+        id_speaker = paste0(program_prefix, moderator_prefix, source, "_", speaker)
+    ) %>%
+    select(-line, -prefix, -program_prefix, -moderator_prefix)
+
+
+
+
+
+## drop unnecessary lines
+transcripts_lanz_v1<- transcripts_lanz_v1$correct %>%
+  select( -id_speaker)
+
+# create Show_id 
+make_show_id <- function(source) {
+  # delete "Lanz_"
+  datum <- sub("Lanz_", "", source)
+  # interpret date (Format: Jahr.Monat.Tag)
+  datum_date <- as.Date(datum, "%Y.%m.%d")
+  # build show_id 
+  paste0("lanz_", format(datum_date, "%Y%m%d"))
+}
+
+transcripts_lanz_v1$show_id <- make_show_id(transcripts_lanz_v1$source)
+
+
+
+# create dialogue_id
+
+transcripts_lanz_v1 <- transcripts_lanz_v1 %>%
+  group_by(show_id) %>%
+  mutate(dialogue_id = sprintf("%s_d_%03d", show_id, row_number())) %>%
+  ungroup()
+
+
+## sort date
+transcripts_lanz_v1 <- transcripts_lanz_v1 %>%
+  mutate(
+    date_str = str_extract(source, "\\d{4}\\.\\d{2}\\.\\d{2}"),
+    date = as.Date(date_str, "%Y.%m.%d")
+  ) %>%
+  arrange(date)
+
+
+
+write.csv(transcripts_lanz_v1, "transcripts_lanz_v1.csv", row.names=FALSE)
+```
+
+
+### Load both data sets
+```{r}
+# Data Shows
+library(readr)
+transcripts_lanz_v1 <- read_csv("transcripts_lanz_v1.csv")
+
+# Data Excel Speaker information
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+```
+
+
+### Speaker Identifikation
+
+
+```{r}
+transcripts_lanz_v1 <- transcripts_lanz_v1 %>%
+  mutate(
+# Speaker_ID:
+    speaker_id = case_when (
+    # LANZ
+    # MONAT APRIL
+    ### DATUM 04.04.24
+    show_id == "lanz_20240404" & speaker %in% c("S07") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240404" & speaker %in% c("S04") ~ "sp_cdu_12",          # Karin Prien, TN, w, Politik, CDU
+    show_id == "lanz_20240404" & speaker %in% c("S03", "S05") ~ "sp_oef_06",         # Anja Mundt-Backhaus, TN, w, Öffentlichkeit
+    show_id == "lanz_20240404" & speaker %in% c("S01") ~ "sp_wiss_15",         # Aladin El-Mafaalani, TN, m, Wissenschaft
+    show_id == "lanz_20240404" & speaker %in% c("S06") ~ "sp_wiss_16",         # Manfred Lütz, TN, m, Wissenschaft
+    show_id == "lanz_20240404" & speaker %in% c("S00", "S02") ~ "e_unbekannt_01",   # Öffentlichkeit 1, Einspieler, Öffentlichkeit
+  ### DATUM 11.04.24
+    show_id == "lanz_20240411" & speaker %in% c("S05") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240411" & speaker %in% c("S03") ~ "sp_cdu_13",          # Reiner Haseloff, TN, m, Politik, CDU
+    show_id == "lanz_20240411" & speaker %in% c("S00") ~ "sp_medien_28",       # Anne Hähnig, TN, w, Medien und Kultur
+    show_id == "lanz_20240411" & speaker %in% c("S04") ~ "sp_medien_29",       # Sascha Lobo, TN, m, Medien und Kultur
+    show_id == "lanz_20240411" & speaker %in% c("S01") ~ "sp_medien_30",       # Christine Strobl, TN, w, Medien und Kultur
+    show_id == "lanz_20240411" & speaker %in% c("S02") ~ "e_cdu_08",           # Wolfgang Schäuble, Einspieler, Politik, CDU, m
+    ### DATUM 18.04.24
+    show_id == "lanz_20240418" & speaker %in% c("S05") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240418" & speaker %in% c("S06") ~ "sp_cdu_11",          # Herbert Reul, TN, m, Politik, CDU
+    show_id == "lanz_20240418" & speaker %in% c("S01") ~ "sp_medien_07",       # Eva Quadbeck, TN, w, Medien und Kultur
+    show_id == "lanz_20240418" & speaker %in% c("S07") ~ "sp_medien_31",       # Eren Güvercin, TN, m, Medien und Kultur
+    show_id == "lanz_20240418" & speaker %in% c("S02") ~ "sp_exp_11",      # Souad Lamroubal, TN, w, Experte
+    show_id == "lanz_20240418" & speaker %in% c("S03", "S00") ~ "e_unbekannt_01",   # Öffentlichkeit 1, Einspieler, öffentlichkeit
+    ### DATUM 25.04.24
+    show_id == "lanz_20240425" & speaker %in% c("S04") ~ "sp_host_03",          # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240425" & speaker %in% c("S06") ~ "sp_cdu_08",           # Jens Spahn, TN, m, Politik, CDU
+    show_id == "lanz_20240425" & speaker %in% c("S02") ~ "sp_medien_32",        # Anna Lehmann, TN, w, Medien und Kultur
+    show_id == "lanz_20240425" & speaker %in% c("S07", "S00") ~ "sp_wiss_17",   # Mandy Mangler, TN, w, Wissenschaft
+    show_id == "lanz_20240425" & speaker %in% c("S03", "S05") ~ "sp_wirt_03", # Marcel Fratzscher, TN, m, Wirtschaft
+    # MONAT MAI 24
+    ### DATUM 2.5.24
+    show_id == "lanz_20240502" & speaker %in% c("S06") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240502" & speaker %in% c("S04") ~ "sp_spd_14",            # Ralf Stegner, TN, m, Politik, SPD
+    show_id == "lanz_20240502" & speaker %in% c("S00") ~ "sp_medien_13",        # Sabine Adler, TN, w, 
+    show_id == "lanz_20240502" & speaker %in% c("S03") ~ "sp_oef_07",        # Leonid Wolkow, TN, m, Ausland/Öffentlichkeit (unsicher)
+    show_id == "lanz_20240502" & speaker %in% c("S05") ~ "sp_wirt_04",     # Hamed Abdel-Samad, TN, m, Wirtschaft
+    show_id == "lanz_20240502" & speaker %in% c("S02", "S01") ~ "e_unbekannt_01",# Einspieler/unbekannt
+    ### DATUM 09.05.24
+    show_id == "lanz_20240509" & speaker %in% c("S04") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240509" & speaker %in% c("S03") ~ "sp_spd_08",            # Stephan Weil, TN, m, Politik, SPD
+    show_id == "lanz_20240509" & speaker %in% c("S00") ~ "sp_wirt_05",     # Veronika Grimm, TN, w, Wirtschaft
+    show_id == "lanz_20240509" & speaker %in% c("S05") ~ "sp_oef_08",           # Bernd Siggelkow, TN, m, Öffentlichkeit
+    show_id == "lanz_20240509" & speaker %in% c("S01") ~ "sp_medien_33",         # Ursula Weidenfeld, TN, w, Medien und Kultur
+    #16.05.24
+    show_id == "lanz_20240516" & speaker %in% c("S03", "S00") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240516" & speaker %in% c("S02") ~ "sp_gruene_07",              # Steffi Lemke, TN, w, Politik, Die Grünen, Regierung DE
+    show_id == "lanz_20240516" & speaker %in% c("S01") ~ "sp_medien_34",              # Ulrike Winkelmann, TN, w, Medien und Kultur
+    show_id == "lanz_20240516" & speaker %in% c("S05") ~ "sp_cdu_14",                 # Joe Chialo, TN, m, Politik, CDU
+    show_id == "lanz_20240516" & speaker %in% c("S04") ~ "sp_medien_35",              # Philipp Peyman Engel, TN, m, Medien und Kultur
+    ### 30.05.24
+    show_id == "lanz_20240530" & speaker %in% c("S03", "S02") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240530" & speaker %in% c("S06") ~ "sp_medien_36",                # Khola Hübsch, TN, w, Medien und Kultur
+    show_id == "lanz_20240530" & speaker %in% c("S01", "S07") ~ "sp_medien_24",           # Ahmad Mansour, TN, m, Wissenschaft
+    show_id == "lanz_20240530" & speaker %in% c("S04") ~ "sp_wiss_18",                  # Murat Kayman, TN, m, Wissenschaft
+    show_id == "lanz_20240530" & speaker %in% c("S00", "S05") ~ "sp_wiss_19",           # Mouhanad Khorchide, TN, m, Wissenschaft
+    # MONAT JUNI
+    ### 06.06.25
+    show_id == "lanz_20240606" & speaker %in% c("S07", "S06") ~ "sp_host_03",        # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240606" & speaker %in% c("S04") ~ "sp_gruene_03",            # Omid Nouripour, TN, m, Politik, Die Grünen
+    show_id == "lanz_20240606" & speaker %in% c("S00") ~ "sp_medien_04",            # Helene Bubrowski, TN, w, Medien und Kultur
+    show_id == "lanz_20240606" & speaker %in% c("S05") ~ "sp_medien_37",            # Ulf Röller, TN, m, Medien und Kultur
+    show_id == "lanz_20240606" & speaker %in% c("S02") ~ "sp_medien_38",            # Britta Hilpert, TN, w, Medien und Kultur
+    show_id == "lanz_20240606" & speaker %in% c("S03") ~ "e_spd_01",                # Olaf Scholz, Einspieler, m, Politik, SPD
+    show_id == "lanz_20240606" & speaker %in% c("S01") ~ "e_cdu_01",                # Friedrich Merz, Einspieler, m, Politik, CDU
+    ### 13.06.24
+    show_id == "lanz_20240613" & speaker %in% c("S05", "S06") ~ "sp_host_03",        # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240613" & speaker %in% c("S03") ~ "sp_spd_05",                # Saskia Esken, TN, w, Politik, SPD
+    show_id == "lanz_20240613" & speaker %in% c("S04") ~ "sp_medien_39",             # Michael Bröcker, TN, m, Medien und Kultur
+    show_id == "lanz_20240613" & speaker %in% c("S00") ~ "sp_exp_12",            # Rüdiger von Fritsch, TN, m, Experte
+    show_id == "lanz_20240613" & speaker %in% c("S02") ~ "sp_wiss_20",               # Simon Schnetzer, TN, m, Wissenschaft
+    show_id == "lanz_20240613" & speaker %in% c("S01") ~ "sp_medien_38",             # Britta Hilpert, TN, w, Medien und Kultur
+    ### 27.06.24
+    show_id == "lanz_20240627" & speaker %in% c("S06") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240627" & speaker %in% c("S02") ~ "sp_bsw_02",            # Sahra Wagenknecht, TN, w, Politik, BSW
+    show_id == "lanz_20240627" & speaker %in% c("S04") ~ "sp_wiss_21",           # Raj Kollmorgen, TN, m, Wissenschaft
+    show_id == "lanz_20240627" & speaker %in% c("S01") ~ "sp_medien_09",         # Kristina Dunz, TN, w, Medien und Kultur
+    show_id == "lanz_20240627" & speaker %in% c("S07") ~ "sp_wiss_22",           # Jacob Ross, TN, m, Wissenschaft
+    show_id == "lanz_20240627" & speaker %in% c("S05", "S03") ~ "e_ausl_02",      # Vladimir Putin, Ausland, Politik, Einspieler, m
+    # MONAT JULI
+    ### 04.07.24
+    show_id == "lanz_20240704" & speaker %in% c("S04") ~ "sp_host_03",             # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240704" & speaker %in% c("S01") ~ "sp_medien_40",           # Deborah Feldman, TN, w, Medien und Kultur
+    show_id == "lanz_20240704" & speaker %in% c("S00") ~ "sp_medien_41",           # Adriana Altaras, TN, w, Medien und Kultur
+    show_id == "lanz_20240704" & speaker %in% c("S03", "S02") ~ "sp_wiss_23",      # Michael Wolffsohn, TN, m, Wissenschaft
+    show_id == "lanz_20240704" & speaker %in% c("S05") ~ "sp_wiss_24",             # Michael Fürst, TN, m, Wissenschaft
+    ### 18.07.24
+    show_id == "lanz_20240718" & speaker %in% c("S06") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240718" & speaker %in% c("S04") ~ "sp_medien_22",         # Elmar Theveßen, TN, m, Medien und Kultur
+    show_id == "lanz_20240718" & speaker %in% c("S00") ~ "sp_fdp_05",            # Linda Teuteberg, TN, w, Politik, FDP
+    show_id == "lanz_20240718" & speaker %in% c("S07") ~ "sp_medien_02",         # Robin Alexander, TN, m, Medien und Kultur
+    show_id == "lanz_20240718" & speaker %in% c("S01") ~ "sp_cdu_15",            # Werner Henning, TN, m, Politik, CDU
+    show_id == "lanz_20240718" & speaker %in% c("S08") ~ "sp_wiss_25",           # Steffen Mau, TN, m, Wissenschaft
+    show_id == "lanz_20240718" & speaker %in% c("S05") ~ "e_ausl_03",             # JD Vance, Einspieler, m, Ausland
+    show_id == "lanz_20240718" & speaker %in% c("S03") ~ "e_ausl_04",             # Thomas Homan, Einspieler, m, Ausland
+    ### 25.07.24
+    show_id == "lanz_20240725" & speaker %in% c("S03") ~ "sp_host_03",            # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240725" & speaker %in% c("S04") ~ "sp_fdp_06",             # Gerhart Baum, TN, m, Politik, FDP
+    show_id == "lanz_20240725" & speaker %in% c("S01") ~ "sp_medien_42",          # Heribert Prantl, TN, m, Medien und Kultur
+    show_id == "lanz_20240725" & speaker %in% c("S06") ~ "sp_wiss_26",            # Frauke Brosius-Gersdorf, TN, w, Wissenschaft
+    show_id == "lanz_20240725" & speaker %in% c("S02") ~ "e_unbekannt_01",        # Unbekannter Einspieler
+    show_id == "lanz_20240725" & speaker %in% c("S00") ~ "e_spd_05",              # Nancy Faeser, Einspieler, w, Politik, SPD
+    # MONAT AUGUST
+    ### 29.08.24
+    show_id == "lanz_20240829" & speaker %in% c("S03") ~ "sp_host_03",             # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240829" & speaker %in% c("S02") ~ "sp_medien_43",           # Hasnain Kazim, TN, m, Medien und Kultur
+    show_id == "lanz_20240829" & speaker %in% c("S04") ~ "sp_medien_32",           # Marc Felix Serrao, TN, m, Medien und Kultur
+    show_id == "lanz_20240829" & speaker %in% c("S01") ~ "sp_medien_44",           # Anna Lehmann, TN, w, Medien und Kultur
+    show_id == "lanz_20240829" & speaker %in% c("S00") ~ "sp_medien_45",           # Dirk Oschmann, TN, m, Medien und Kultur
+    # MONAT SEPT
+    ### 05.09.24
+    show_id == "lanz_20240905" & speaker %in% c("S07") ~ "sp_host_03",               # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240905" & speaker %in% c("S05", "S03", "S06") ~ "sp_ausland_02", # Vladimir Kara-Murza, Ausland, TN, m
+    show_id == "lanz_20240905" & speaker %in% c("S02") ~ "sp_wiss_27",               # Gerhard Conrad, TN, m, Wissenschaft
+    show_id == "lanz_20240905" & speaker %in% c("S00") ~ "sp_medien_22",             # Elmar Theveßen, TN, m, Medien und Kultur
+    show_id == "lanz_20240905" & speaker %in% c("S01") ~ "sp_wiss_28",               # Florence Gaub, TN, w, Wissenschaft
+    show_id == "lanz_20240905" & speaker %in% c("S04") ~ "sp_medien_46",             # Nikolaus Blome, TN, m, Medien und Kultur
+    ### 12.09.24
+    show_id == "lanz_20240912" & speaker %in% c("S02") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240912" & speaker %in% c("S00") ~ "sp_spd_15",          # Klara Geywitz, TN, w, Politik, SPD, Regierung DE
+    show_id == "lanz_20240912" & speaker %in% c("S03") ~ "sp_medien_39",       # Michael Bröcker, TN, m, Medien und Kultur
+    show_id == "lanz_20240912" & speaker %in% c("S04") ~ "sp_politik_01",      # Dirk Neubauer, TN, m, Politik (kein Partei-Label)
+    show_id == "lanz_20240912" & speaker %in% c("S01") ~ "sp_medien_47",       # Bojan Pancevski, TN, m, Medien und Kultur
+    ### 26.09.24
+    show_id == "lanz_20240926" & speaker %in% c("S06", "S07") ~ "sp_host_03",    # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20240926" & speaker %in% c("S04") ~ "sp_cdu_10",            # Roderich Kiesewetter, TN, m, Politik, CDU
+    show_id == "lanz_20240926" & speaker %in% c("S01") ~ "sp_medien_48",         # Corinna Milborn, TN, w, Medien und Kultur
+    show_id == "lanz_20240926" & speaker %in% c("S05") ~ "sp_wiss_07",           # Gerald Knaus, TN, m, Wissenschaft
+    show_id == "lanz_20240926" & speaker %in% c("S03") ~ "sp_medien_49",         # Veit Medick, TN, m, Medien und Kultur
+    show_id == "lanz_20240926" & speaker %in% c("S02") ~ "e_cdu_01",             # Friedrich Merz, Einspieler, m, Politik, CDU
+    show_id == "lanz_20240926" & speaker %in% c("S00") ~ "e_ausl_05",         # Herbert Kickl, Einspieler, ausland, m
+    # MONAT OKT 
+    ### 03.10.24
+    show_id == "lanz_20241003" & speaker %in% c("S02", "S05") ~ "sp_host_03",      # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241003" & speaker %in% c("S00") ~ "sp_spd_13",              # Kevin Kühnert, TN, m, Politik, SPD
+    show_id == "lanz_20241003" & speaker %in% c("S03") ~ "sp_medien_02",           # Robin Alexander, TN, m, Medien und Kultur
+    show_id == "lanz_20241003" & speaker %in% c("S01") ~ "sp_wiss_29",             # Rüdiger Maas, TN, m, Wissenschaft
+    show_id == "lanz_20241003" & speaker %in% c("S04") ~ "sp_medien_48",           # Corinna Milborn, TN, w, Medien und Kultur
+    ### 10.10.24
+    show_id == "lanz_20241010" & speaker %in% c("S06") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241010" & speaker %in% c("S07") ~ "sp_gruene_05",         # Katharina Dröge, TN, w, Politik, die Grünen
+    show_id == "lanz_20241010" & speaker %in% c("S03") ~ "sp_cdu_16",            # Philipp Amthor, TN, m, CDU, Politik
+    show_id == "lanz_20241010" & speaker %in% c("S00") ~ "sp_oef_09",           # Maja Zaubitzer, TN, w, Öffentlichkeit
+    show_id == "lanz_20241010" & speaker %in% c("S04") ~ "sp_medien_39",         # Michael Bröcker, TN, m, Medien und Kultur
+    show_id == "lanz_20241010" & speaker %in% c("S01") ~ "e_afd_02",             # Maximilian Krah, Einspieler, m, Politik, AfD
+    show_id == "lanz_20241010" & speaker %in% c("S02") ~ "e_cdu_01",             # Friedrich Merz, Einspieler, m, Politik, CDU
+    show_id == "lanz_20241010" & speaker %in% c("S05") ~ "e_afd_03",             # Miguel Klauss, Einspieler, AfD
+    ### 17.10.24
+    show_id == "lanz_20241017" & speaker %in% c("S06") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241017" & speaker %in% c("S05") ~ "sp_cdu_09",            # Norbert Röttgen, TN, m, Politik, CDU
+    show_id == "lanz_20241017" & speaker %in% c("S02") ~ "sp_medien_13",         # Sabine Adler, TN, w, Medien und Kultur
+    show_id == "lanz_20241017" & speaker %in% c("S08") ~ "sp_medien_50",         # Daniel Gerlach, TN, m, Medien und Kultur
+    show_id == "lanz_20241017" & speaker %in% c("S07") ~ "sp_medien_51",         # Paul Ronzheimer, TN, m, Medien und Kultur
+    show_id == "lanz_20241017" & speaker %in% c("S01") ~ "e_ausl_06",         # Netanjahu, Einspieler, ausland
+    show_id == "lanz_20241017" & speaker %in% c("S00") ~ "e_cdu_01",             # Friedrich Merz, Einspieler, CDU
+    show_id == "lanz_20241017" & speaker %in% c("S03") ~ "e_spd_01",             # Olaf Scholz, Einspieler, SPD
+    ### 24.10.24
+    show_id == "lanz_20241024" & speaker %in% c("S01", "S00") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241024" & speaker %in% c("S02") ~ "sp_fdp_01",                 # Christian Dürr, TN, m, FDP
+    show_id == "lanz_20241024" & speaker %in% c("S04") ~ "sp_wirt_06",          # Herbert Diess, TN, m, Wirtschaft
+    show_id == "lanz_20241024" & speaker %in% c("S07") ~ "sp_medien_52",              # Christina Kunkel, TN, Medien und Kultur
+    show_id == "lanz_20241024" & speaker %in% c("S03", "S06") ~ "sp_wiss_30",         # Stefan Bratzel, TN, m, Wissenschaft
+    ### 31.10.24
+    show_id == "lanz_20241031" & speaker %in% c("S08") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241031" & speaker %in% c("S05") ~ "sp_spd_16",            # Philipp Türmer, TN, m, Politik, SPD
+    show_id == "lanz_20241031" & speaker %in% c("S11") ~ "sp_cdu_17",            # Johannes Winkel, TN, m, Politik, CDU
+    show_id == "lanz_20241031" & speaker %in% c("S00") ~ "sp_fdp_07",            # Franziska Brandmann, TN, w, Politik, FDP
+    show_id == "lanz_20241031" & speaker %in% c("S10", "S09") ~ "sp_gruene_08",  # Jakob Blasel, TN, m, Politik, die Grünen
+    show_id == "lanz_20241031" & speaker %in% c("S01") ~ "sp_gruene_09",         # Svenja Appuhn, TN, w, Politik, die Grünen
+    show_id == "lanz_20241031" & speaker %in% c("S06") ~ "e_fdp_03",             # Christian Dürr, Einspieler, FDP
+    show_id == "lanz_20241031" & speaker %in% c("S07") ~ "e_cdu_09",             # Martin Huber, Einspieler, CDU
+    show_id == "lanz_20241031" & speaker %in% c("S04") ~ "e_cdu_01",             # Friedrich Merz, Einspieler, CDU
+    # MONAT NOV
+    ### 07.11. 24
+    show_id == "lanz_20241107" & speaker %in% c("S05") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241107" & speaker %in% c("S01") ~ "sp_gruene_04",         # Robert Habeck, TN, m, Politik, die Grünen
+    show_id == "lanz_20241107" & speaker %in% c("S02") ~ "sp_spd_05",            # Saskia Esken, TN, w, Politik, SPD
+    show_id == "lanz_20241107" & speaker %in% c("S03") ~ "sp_medien_39",         # Michael Bröcker, TN, m, Medien und Kultur
+    show_id == "lanz_20241107" & speaker %in% c("S00") ~ "sp_medien_53",         # Antje Höning, TN, w, Medien und Kultur
+    show_id == "lanz_20241107" & speaker %in% c("S06") ~ "sp_medien_37",         # Ulf Röller, TN, m, Medien und Kultur
+    show_id == "lanz_20241107" & speaker %in% c("S04") ~ "e_fdp_01",             # Christian Lindner, Einspieler, FDP
+    ### 14.11. 24
+    show_id == "lanz_20241114" & speaker %in% c("S05") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241114" & speaker %in% c("S02") ~ "sp_fdp_08",            # Marco Buschmann, TN, m, Politik, FDP
+    show_id == "lanz_20241114" & speaker %in% c("S01") ~ "sp_medien_54",         # Kerstin Münstermann, TN, w, Medien und Kultur
+    show_id == "lanz_20241114" & speaker %in% c("S03") ~ "sp_medien_55",         # Adrian Geiges, TN, m, Medien und Kultur
+    show_id == "lanz_20241114" & speaker %in% c("S00") ~ "sp_medien_08",         # Frederik Pleitgen, TN, m, Medien und Kultur
+    show_id == "lanz_20241114" & speaker %in% c("S04") ~ "e_ausl_07",         # Xi Jinping, Einspieler, Ausland
+    ### 21.11. 24
+    show_id == "lanz_20241121" & speaker %in% c("S05", "S04") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241121" & speaker %in% c("S06") ~ "sp_gruene_05",             # Katharina Dröge, TN, w, Politik, die Grünen
+    show_id == "lanz_20241121" & speaker %in% c("S03") ~ "sp_cdu_18",                # Johannes Volkmann, TN, m, Politik, CDU
+    show_id == "lanz_20241121" & speaker %in% c("S00", "S07") ~ "sp_medien_04",      # Helene Bubrowski, TN, w, Medien und Kultur
+    show_id == "lanz_20241121" & speaker %in% c("S02") ~ "sp_medien_56",             # Julian Olk, TN, m, Medien und Kultur
+    show_id == "lanz_20241121" & speaker %in% c("S08") ~ "e_gruene_01",              # Ricarda Lang, Einspieler, die Grünen
+    show_id == "lanz_20241121" & speaker %in% c("S01") ~ "e_csu_01",                 # Söder, Einspieler, CSU
+    ### 28.11.24
+    show_id == "lanz_20241128" & speaker %in% c("S08") ~ "sp_host_03",           # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241128" & speaker %in% c("S04") ~ "sp_gruene_10",         # Katrin Göring-Eckardt, TN, w, Politik, die Grünen
+    show_id == "lanz_20241128" & speaker %in% c("S06") ~ "sp_wiss_31",           # Kai Ambos, TN, m, Wissenschaft
+    show_id == "lanz_20241128" & speaker %in% c("S09") ~ "sp_medien_02",         # Robin Alexander, TN, m, Medien und Kultur
+    show_id == "lanz_20241128" & speaker %in% c("S02") ~ "sp_politik_02",        # René Wilke, TN, m, Politik (kein Parteienbezug angegeben)
+    show_id == "lanz_20241128" & speaker %in% c("S00") ~ "e_gruene_01",        # 
+    show_id == "lanz_20241128" & speaker %in% c("S07", "S05", "S03", "S01") ~ "e_unbekannt_01", # Einspieler, unbekannt
+    # MONAT DEZ
+    ### 05.12.24
+    show_id == "lanz_20241205" & speaker %in% c("S03") ~ "sp_host_03",         # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241205" & speaker %in% c("S04") ~ "sp_spd_02",          # Lars Klingbeil, TN, m, SPD
+    show_id == "lanz_20241205" & speaker %in% c("S00") ~ "sp_medien_54",       # Kerstin Münstermann, w, Medien und Kultur
+    show_id == "lanz_20241205" & speaker %in% c("S01") ~ "sp_exp_13",      # Christian Mölling, m, Experte
+    show_id == "lanz_20241205" & speaker %in% c("S02") ~ "e_unbekannt_01",     # Einspieler, unbekannt
+    ### 12.12. 24
+    show_id == "lanz_20241212" & speaker %in% c("S03") ~ "sp_host_03",          # Markus Lanz, Moderation, m, Medien und Kultur
+    show_id == "lanz_20241212" & speaker %in% c("S01") ~ "sp_spd_17",           # Anna Kassautzki, w, SPD (fortlaufend)
+    show_id == "lanz_20241212" & speaker %in% c("S04") ~ "sp_fdp_09",           # Jens Teutrine, m, FDP (fortlaufend)
+    show_id == "lanz_20241212" & speaker %in% c("S00") ~ "sp_gruene_11",        # Merle Spellerberg, w, die Grünen (fortlaufend)
+    show_id == "lanz_20241212" & speaker %in% c("S02") ~ "sp_cdu_19",           # Maximilian Mörseburg, m, CDU (fortlaufend)
+    # 2025
+    # MONAT JAN
+    ### 09.01.25
+    show_id == "lanz_20250109" & speaker %in% c("S04") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250109" & speaker %in% c("S02") ~ "sp_spd_08",                 # Stephan Weil, SPD-Politiker
+    show_id == "lanz_20250109" & speaker %in% c("S00") ~ "sp_medien_86",              # Sonja Álvarez, Medien
+    show_id == "lanz_20250109" & speaker %in% c("S03") ~ "sp_wiss_07",        # Gerald Knaus, Wissenschaft
+    show_id == "lanz_20250109" & speaker %in% c("S01") ~ "e_ausl_09",              # Salome Surabischwili, Ausland, Einspieler
+    ### 16.01.25
+    show_id == "lanz_20250116" & speaker %in% c("S01") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250116" & speaker %in% c("S02") ~ "sp_fdp_01",                 # Christian Dürr, FDP-Fraktionschef
+    show_id == "lanz_20250116" & speaker %in% c("S03") ~ "sp_cdu_03",                 # Claus Ruhe Madsen, CDU-Politiker
+    show_id == "lanz_20250116" & speaker %in% c("S00") ~ "sp_medien_12",              # Melanie Amann, Medien
+    show_id == "lanz_20250116" & speaker %in% c("S04") ~ "sp_wirt_03",          # Marcel Fratzscher, Wirtschaft
+    ### 23.01.25
+    show_id == "lanz_20250123" & speaker %in% c("S05") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250123" & speaker %in% c("S04") ~ "sp_csu_05",                 # Martin Huber, CSU-Politiker
+    show_id == "lanz_20250123" & speaker %in% c("S01") ~ "sp_wiss_40",        # Victoria Rietig, Wissenschaft
+    show_id == "lanz_20250123" & speaker %in% c("S02") ~ "sp_medien_01",              # Markus Feldenkirchen, Medien
+    show_id == "lanz_20250123" & speaker %in% c("S03") ~ "sp_medien_50",             # Daniel Gerlach, Experte
+    show_id == "lanz_20250123" & speaker %in% c("S00") ~ "e_cdu_11",                  # Joachim Hermann, Einspieler, CDU
+    ### 30.01.25
+    show_id == "lanz_20250130" & speaker %in% c("S05") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250130" & speaker %in% c("S00") ~ "sp_spd_15",                 # Klara Geywitz, SPD-Politikerin
+    show_id == "lanz_20250130" & speaker %in% c("S01") ~ "sp_medien_54",              # Kerstin Münstermann, Medien
+    show_id == "lanz_20250130" & speaker %in% c("S04") ~ "sp_wiss_07",        # Gerald Knaus, Wissenschaft
+    show_id == "lanz_20250130" & speaker %in% c("S03", "S02") ~ "sp_oef_29", # Michael Kyrath, Öffentlichkeit
+    # MONAT FEB
+    ### 06.02.25
+    show_id == "lanz_20250206" & speaker %in% c("S04") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250206" & speaker %in% c("S03", "S01") ~ "sp_spd_12",                 # Wolfgang Schmidt, SPD
+    show_id == "lanz_20250206" & speaker %in% c("S02") ~ "sp_cdu_08",                 # Jens Spahn, CDU
+    show_id == "lanz_20250206" & speaker %in% c("S00") ~ "sp_medien_07",              # Eva Quadbeck, Medien
+    ### 13.02.25
+    show_id == "lanz_20250213" & speaker %in% c("S08") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250213" & speaker %in% c("S07") ~ "sp_medien_39",              # Michael Bröcker, Medien
+    show_id == "lanz_20250213" & speaker %in% c("S01") ~ "sp_medien_09",              # Kristina Dunz, Medien
+    show_id == "lanz_20250213" & speaker %in% c("S09") ~ "sp_medien_87",              # Richard David Precht, Medien
+    show_id == "lanz_20250213" & speaker %in% c("S04") ~ "sp_medien_88",              # Sabine Rennefanz, Medien
+    show_id == "lanz_20250213" & speaker %in% c("S00") ~ "e_csu_01",                  # Söder, Einspieler, CSU
+    show_id == "lanz_20250213" & speaker %in% c("S06") ~ "e_spd_01",                  # Scholz, Einspieler, SPD
+    show_id == "lanz_20250213" & speaker %in% c("S03") ~ "e_afd_04",                  # Weidel, Einspieler, AfD
+    show_id == "lanz_20250213" & speaker %in% c("S02") ~ "e_gruene_06",               # Baerbock, Einspieler, Grüne
+    ### 20.02.25
+    show_id == "lanz_20250220" & speaker %in% c("S02", "S06") ~ "sp_host_03",                # Markus Lanz (immer)
+    show_id == "lanz_20250220" & speaker %in% c("S01") ~ "sp_medien_12",              # Melanie Amann, Medien
+    show_id == "lanz_20250220" & speaker %in% c("S03") ~ "sp_medien_89",              # Gregor Peter Schmitz, Medien
+    show_id == "lanz_20250220" & speaker %in% c("S05", "S04") ~ "sp_medien_90",       # Jacques Schuster, Medien
+    show_id == "lanz_20250220" & speaker %in% c("S00") ~ "sp_medien_91",             # Martin Machowecz, Medien
+    ))
+
+
+missing_speakers <- subset(transcripts_lanz_v1, is.na(speaker_id)) ## alle Speaking Sequenzen codiert!
+
+```
+
+```{r}
+#Speichern Datensatz:
+write.csv(transcripts_lanz_v1, "lanz_speaker.csv", row.names=FALSE)
+```
+
+### Join Datasets
+
+```{r}
+# Data Shows
+library(readr)
+lanz_speaker<- read_csv("lanz_speaker.csv")
+
+
+# Data Excel Speaker infos
+speaker_infos <-  readxl::read_excel("speaker_identification.xlsx")
+
+```
+
+
+```{r}
+# Join Datasets:
+lanz_dataframe <- lanz_speaker %>%
+  left_join(speaker_infos, by = "speaker_id")
+
+
+write.csv(lanz_dataframe , "lanz_dataframe.csv", row.names=FALSE)
+```

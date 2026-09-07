@@ -1,0 +1,3348 @@
+---
+title: "Results Analysis Populism"
+format: html
+editor: visual
+---
+
+
+# Results
+
+
+# Dataset:
+```{r}
+df_gesamt <- readr::read_csv("df_gesamt.csv")
+```
+
+# Colors
+```{r}
+# Broadcasts
+# mint - blue
+broadcast_colors <- c(
+    "Haf" = "#B7D8C6",  
+  "Illner"         = "#7AC7DF",  
+  "Lanz"           = "#337AB7")
+
+
+
+# Parties
+party_colors <- c(
+  "SPD" = "#E3000F",
+  "Union" = "#000000",
+  "die Grünen" = "#1AA037",
+  "Linke" = "#C22D6D",
+  "FDP" = "#FFEF00",
+  "AfD" = "#0489DB",
+  "FW" = "#EF8108",
+  "BSW" = "#6B1D3A"
+)
+```
+
+# How pronounced is populism?
+
+## Absolute and relative frequencies
+
+```{r}
+# Overall analysis:
+df_gesamt %>%
+  count(populismus) %>%
+  mutate(Percent = round(100 * n / sum(n), 1)) %>%
+  gt() %>%
+  tab_header(title = "Populism distribution overall") %>%
+  cols_label(
+    populismus = "Populism",
+    n = "Count",
+    Percent = "Percent (%)"
+  )
+#### 5% Populistic shares (4256)
+
+# Distribution per broadcast:
+
+# Absolute numbers per broadcast
+df_gesamt %>%
+  group_by(sendung, populismus) %>%
+  summarise(anzahl = n()) %>%
+  tidyr::pivot_wider(names_from = populismus, values_from = anzahl, values_fill = 0)
+
+# Relative frequencies per broadcast
+df_gesamt %>%
+  group_by(sendung, populismus) %>%
+  summarise(anzahl = n()) %>%
+  mutate(anteil = anzahl / sum(anzahl)) %>%
+  tidyr::pivot_wider(names_from = populismus, values_from = c(anzahl, anteil), values_fill = 0)
+
+# Absolute and relative frequencies per broadcast
+tab <- df_gesamt %>%
+  group_by(sendung, populismus) %>%
+  summarise(Anzahl = n(), .groups = "drop") %>%
+  group_by(sendung) %>%
+  mutate(Percent = round(100 * Anzahl / sum(Anzahl), 1)) %>%
+  ungroup()
+```
+
+### Table: Populism shares by format
+
+```{r}
+gesamt_n   <- nrow(df_gesamt)
+gesamt_pop <- sum(df_gesamt$populismus == TRUE)  
+# with gridlines
+tab %>%
+  filter(populismus == TRUE) %>%
+  mutate(
+    sendung = case_when(
+      sendung == "Haf" ~ "Hart aber Fair",
+      sendung == "Illner" ~ "Maybrit Illner",
+      sendung == "Lanz" ~ "Markus Lanz",
+      TRUE ~ sendung
+    ) ,
+    Percent = sprintf("%.1f %%", Percent)  # Percent as string with %
+  ) %>%
+  select(Broadcast = sendung, Count = Anzahl, Percent) %>%
+  gt() %>%
+  tab_header(
+    title = md("Share of populist elements by format")
+  ) %>%
+  fmt_number(
+    columns = c("Count"),
+    decimals = 0,
+    use_seps = TRUE
+  ) %>%
+  cols_label(
+    Broadcast = "Format",
+    Count = "Count",
+    Percent = "Share of populist elements"
+  ) %>%
+  tab_style(
+    style = cell_borders(sides = "all", color = "grey80", weight = px(1)),
+    locations = cells_body()
+  ) %>%
+  tab_options(
+    table.border.top.color = "white",
+    table.border.bottom.color = "white",
+    table.border.top.width = px(0),
+    table.border.bottom.width = px(0),
+    column_labels.border.top.width = px(0),
+    column_labels.border.bottom.width = px(0),
+    table.border.left.width = px(0),
+    table.border.right.width = px(0),
+    heading.background.color = "#f2f2f2",
+    table.background.color = "white",
+    table.font.size = 14
+  ) %>%
+  cols_align(
+    align = "left",
+    columns = c("Broadcast")
+  ) %>%
+  cols_align(
+    align = "right",
+    columns = c("Count", "Percent")
+  ) %>%
+  tab_source_note(
+    source_note = md(
+      paste0("Total number of sentences: ", gesamt_n, " | Number of populist sentences: ", gesamt_pop)
+    )
+  )
+
+
+# without gridlines
+tab_pop_anteil_pro_format <-  tab %>%
+  filter(populismus == TRUE) %>%
+  mutate(
+    sendung = case_when(
+      sendung == "Haf" ~ "Hart aber Fair",
+      sendung == "Illner" ~ "Maybrit Illner",
+      sendung == "Lanz" ~ "Markus Lanz",
+      TRUE ~ sendung
+    ),
+    Percent = sprintf("%.1f %%", Percent)  # Percent as string with %
+  ) %>%
+  select(Broadcast = sendung, Count = Anzahl, Percent) %>%
+  gt() %>%
+  tab_header(
+    title = md("Share of populist elements by format")
+  ) %>%
+  fmt_number(
+    columns = c("Count"),
+    decimals = 0,
+    use_seps = TRUE
+  ) %>%
+  cols_label(
+    Broadcast = "Format",
+    Count = "Count",
+    Percent = "Share of populist elements"
+  ) %>%
+  tab_options(
+    table.border.top.color = "white",
+    table.border.bottom.color = "white",
+    table.border.top.width = px(0),
+    table.border.bottom.width = px(0),
+    column_labels.border.top.width = px(0),
+    column_labels.border.bottom.width = px(0),
+    table.border.left.width = px(0),
+    table.border.right.width = px(0),
+    heading.background.color = "#f2f2f2",
+    table.background.color = "white",
+    table.font.size = 14
+  ) %>%
+  cols_align(
+    align = "left",
+    columns = c("Broadcast")
+  ) %>%
+  cols_align(
+    align = "right",
+    columns = c("Count", "Percent")
+  ) %>%
+  tab_source_note(
+    source_note = md(
+      paste0("Total number of sentences: ", gesamt_n, " | Number of populist sentences: ", gesamt_pop)
+    )
+  )
+
+# Save as HTML
+gtsave(tab_pop_anteil_pro_format, "tab_pop_anteil_pro_format.html")
+
+# Save HTML as PNG
+webshot("tab_pop_anteil_pro_format.html", "tab_pop_anteil_pro_format.png", zoom = 2)  
+```
+
+## Top sentences for illustration
+
+### Top 5 most populist sentences
+```{r}
+# Pop Max highest populism value
+df_gesamt %>%
+  filter(pop_max > schwelle_95) %>%
+  arrange(desc(pop_max)) %>%
+  slice_head(n = 5) %>%
+  select(sendung, role, name, job, party, sentences...20, pop_max, Anti_Elitism, People_Centrism)
+### all anti-elite sentences
+
+top_5_pop <-  df_gesamt %>%
+  filter(pop_max > schwelle_95) %>%
+  arrange(desc(pop_max)) %>%
+  slice_head(n = 5) %>%
+  select(sendung, name, job, sentences...20, pop_max)
+# predominantly media/communication and politics, moderator ZDF = Markus Söder
+
+
+
+# Save table as gt object
+top5_allg_gt <- top_5_pop %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 populist sentences",
+    subtitle = "With additional characteristics of speakers"
+  ) %>%
+  fmt_number(
+    columns = pop_max,
+    decimals = 3
+  ) %>%
+  cols_label(
+    sendung = "Format",
+    name    = "Name",
+    job     = "Profession",
+    sentences...20 = "Sentence",
+    pop_max = "Populism score"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  cols_width(
+    sentences...20 ~ px(300),
+    pop_max ~ px(120)
+  ) %>%
+  data_color(
+    columns = c(pop_max),
+    colors = scales::col_numeric(
+      palette = c("white"),
+      domain = NULL
+    )
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = px(14),
+    heading.title.font.size = px(18),
+    heading.subtitle.font.size = px(15),
+    table_body.hlines.color = "lightgrey",
+    table.border.top.width = px(2),
+    table.border.top.color = "black",
+    table.border.bottom.width = px(2),
+    table.border.bottom.color = "black"
+  )
+
+
+
+  top5_allg_gt <- top_5_pop %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 most populist statements according to populism score",
+    subtitle = "Ranking by populism score with information on format, speaker and profession"
+  ) %>%
+  fmt_number(
+    columns = pop_max,
+    decimals = 3
+  ) %>%
+  cols_label(
+    sendung = "Format",
+    name    = "Name",
+    job     = "Profession",
+    sentences...20 = "Sentence",
+    pop_max = "Populism score"
+  ) %>%
+  # Make only sentence column very wide, rest narrow
+  cols_width(
+    sendung ~ px(80),
+    name ~ px(120),
+    job ~ px(120),
+    sentences...20 ~ px(600),  # Sentence column wide!
+    pop_max ~ px(90)
+  ) %>%
+  # Sentences left-aligned, rest centered (optional)
+  cols_align(
+    align = "left",
+    columns = sentences...20
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(sendung, name, job, pop_max)
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = px(13),
+    heading.title.font.size = px(18),
+    heading.subtitle.font.size = px(15),
+    table_body.hlines.color = "lightgrey",
+    table.border.top.width = px(2),
+    table.border.top.color = "black",
+    table.border.bottom.width = px(2),
+    table.border.bottom.color = "black",
+     data_row.padding = px(20)
+  )
+
+# Save as HTML
+gtsave(top5_allg_gt, "top5_allg_gt.html")
+
+# Save HTML as PNG
+webshot("top5_allg_gt.html", "top5_allg_gt.png", zoom = 2)  
+
+webshot(
+  "top5_allg_gt.html",
+  "top5_allg_gt.png",
+  zoom = 2,
+  vwidth = 1600,    # more width
+  vheight = 1200    # more height (depending on table length)
+)
+
+```
+
+### Top 5 sentences: People centrism
+
+```{r}
+
+top_5_pc <- df_gesamt %>%
+  arrange(desc(People_Centrism)) %>%
+  slice_head(n = 5) %>%
+  select(sendung, name, job, sentences...20, People_Centrism)
+
+top5_pc_gt <- top_5_pc %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 most populist statements according to people-centrism score",
+    subtitle = "Ranking by people-centrism score with information on format, speaker and profession"
+  ) %>%
+  fmt_number(
+    columns = c(People_Centrism),
+    decimals = 3
+  ) %>%
+  cols_label(
+    sendung = "Format",
+    name    = "Name",
+    job     = "Profession",
+    sentences...20 = "Sentence",
+    People_Centrism = "People centrism"
+  ) %>%
+ # Make only sentence column very wide, rest narrow
+  cols_width(
+    sendung ~ px(80),
+    name ~ px(120),
+    job ~ px(120),
+    sentences...20 ~ px(600),  # Sentence column wide!
+    People_Centrism ~ px(90)
+  ) %>%
+  # Sentences left-aligned, rest centered (optional)
+  cols_align(
+    align = "left",
+    columns = sentences...20
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = c(sendung, name, job, People_Centrism )
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = px(13),
+    heading.title.font.size = px(18),
+    heading.subtitle.font.size = px(15),
+    table_body.hlines.color = "lightgrey",
+    table.border.top.width = px(2),
+    table.border.top.color = "black",
+    table.border.bottom.width = px(2),
+    table.border.bottom.color = "black",
+     data_row.padding = px(20)
+  )
+
+# Save as HTML
+gtsave(top5_pc_gt , "top5_pc_gt.html")
+
+# Save HTML as PNG
+webshot("top5_pc_gt.html", "top5_pc_gt.png", zoom = 2)  
+```
+
+### Top 5 sentences by format
+```{r}
+top_5_pro_sendung <- df_gesamt %>%
+  filter(pop_max > schwelle_95) %>%
+  group_by(sendung) %>%
+  slice_max(order_by = pop_max, n = 5, with_ties = FALSE) %>%
+  ungroup() %>%
+  arrange(sendung, desc(pop_max)) %>%
+  select(sendung, role, name, job, party, sentences...20, pop_max)
+
+
+top_5_pro_sendung_gt <- top_5_pro_sendung %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 populist sentences per broadcast",
+    subtitle = "With additional characteristics of speakers"
+  ) %>%
+  fmt_number(
+    columns = pop_max,
+    decimals = 3
+  ) %>%
+  cols_label(
+    sendung = "Broadcast",
+    role    = "Role",
+    name    = "Name",
+    job     = "Profession",
+    party   = "Party",
+    sentences...20 = "Sentence",
+    pop_max = "Populism score"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  cols_width(
+    sentences...20 ~ px(300),
+    pop_max ~ px(120)
+  ) %>%
+  data_color(
+    columns = c(pop_max),
+    colors = scales::col_numeric(
+      palette = c("white"),
+      domain = NULL
+    )
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    table.font.size = px(14),
+    heading.title.font.size = px(18),
+    heading.subtitle.font.size = px(15),
+    table_body.hlines.color = "lightgrey",
+    table.border.top.width = px(2),
+    table.border.top.color = "black",
+    table.border.bottom.width = px(2),
+    table.border.bottom.color = "black"
+  )
+
+# Save as HTML
+gtsave(top_5_pro_sendung_gt, "top_5_pro_sendung_gt.html")
+
+# Save HTML as PNG
+webshot("top_5_pro_sendung_gt.html", "top_5_pro_sendung_gt.png", zoom = 2)
+```
+
+## Content-related
+### Word cloud
+```{r}
+library(dplyr)
+library(tidytext)
+library(stopwords)
+library(wordcloud2)
+
+# 0. Calculate 95th percentile threshold & filter
+schwelle_95 <- quantile(df_gesamt$pop_max, 0.95, na.rm = TRUE)
+df_pop <- df_gesamt %>%
+  filter(pop_max > schwelle_95)
+
+# 1. Build extended stopword list
+de_stop <- stopwords("de")
+filler_words <- c(
+  "also","auch","bloß","denn","doch","eben","eigentlich","etwa","halt","ja","mal","nur",
+  "schon","vielleicht","wohl","quasi","irgendwie","sozusagen","tja","naja","ne","mein","dein",
+  "okay","klar","gut","überhaupt","eventuell","bestimmt","immerhin","sowieso","bisschen","sagen",
+  "sogar","natürlich","eher","ziemlich","fast","wirklich","offenbar","meist","meistens","jedenfalls",
+  "übrigens","ebenfalls","je","gar","recht","relativ", "dass"
+)
+custom_stopwords <- c("herr","frau","Herr","Frau")
+speaker_tags <- c(paste0("s", 1:99), paste0("s", sprintf("%02d", 1:99)))
+all_stopwords <- unique(c(de_stop, filler_words, custom_stopwords, speaker_tags))
+all_stopwords_df <- data.frame(word = all_stopwords, stringsAsFactors = FALSE)
+
+# 2. Remove speaker tags per regex from sentence text
+remove_s_speaker_words <- function(text) {
+  gsub("\\bs\\d+\\b", "", text, ignore.case = TRUE)
+}
+df_pop$sentences...20 <- sapply(df_pop$sentences...20, remove_s_speaker_words)
+
+# 3. Tokenize, remove numbers and stopwords, calculate statistics
+df_words <- df_pop %>%
+  unnest_tokens(word, sentences...20) %>%
+  filter(!grepl("^[0-9]+$", word)) %>%              # <--- excludes pure numbers!
+  anti_join(all_stopwords_df, by = "word") %>%
+  group_by(word) %>%
+  summarise(
+    freq = n(),
+    mean_pop = mean(pop_max, na.rm = TRUE)
+  ) %>%
+  filter(freq > 2) # Optional: only words with more than 2 occurrences
+
+# 4. Color scale for word cloud
+df_words$score_scaled <- (df_words$mean_pop - min(df_words$mean_pop)) /
+                        (max(df_words$mean_pop) - min(df_words$mean_pop))
+get_color <- colorRampPalette(c("grey70", "red"))
+farben <- get_color(100)
+df_words$color <- farben[as.numeric(cut(df_words$score_scaled, breaks = 100))]
+
+# 5. Generate word cloud
+wordcloud2(df_words, color = df_words$color)
+## large: afd, a,pel, cdu, bevölkerung, bürger
+```
+
+## Influence of speakers
+
+## Overview
+```{r}
+# Calculate share of populist sentences per actor
+df_gesamt %>%
+  group_by(name, party, job) %>%
+  summarise(
+    n_gesamt = n(),
+    n_pop = sum(populismus == 1, na.rm = TRUE),
+    anteil_pop = n_pop / n_gesamt,
+    beispiel = sentences...20[which(populismus == 1)[1]]
+  ) %>%
+  ungroup() %>%
+  arrange(desc(anteil_pop)) %>%
+  slice_head(n = 5)
+# Weighting difficult
+
+# only participants
+df_gesamt %>%
+  filter(role == "TN") %>%        # Only participants
+  group_by(name, party, job) %>%
+  summarise(
+    n_gesamt = n(),
+    n_pop = sum(populismus == 1, na.rm = TRUE),
+    anteil_pop = n_pop / n_gesamt,
+    beispiel = sentences...20[which(populismus == 1)[1]]
+  ) %>%
+  ungroup() %>%
+  arrange(desc(anteil_pop)) %>%
+  slice_head(n = 5)
+
+## Participants per broadcast
+top5_akteure_anteil_tn_sendung <- df_gesamt %>%
+  filter(role == "TN") %>%                                 # Only participants
+  group_by(sendung, name, party, job) %>%
+  summarise(
+    n_gesamt = n(),
+    n_pop = sum(populismus == 1, na.rm = TRUE),
+    anteil_pop = n_pop / n_gesamt,
+    beispiel = sentences...20[which(populismus == 1)[1]]
+  ) %>%
+  ungroup() %>%
+  arrange(sendung, desc(anteil_pop)) %>%
+  group_by(sendung) %>%
+  slice_head(n = 5)         
+
+tabelle_top5_tn_pro_sendung <- top5_akteure_anteil_tn_sendung %>%
+  gt(groupname_col = "sendung") %>%
+  tab_header(
+    title = md("**Top 5 participants per broadcast by populism share**"),
+    subtitle = "With profession and example sentence"
+  ) %>%
+  fmt_percent(
+    columns = anteil_pop,
+    decimals = 1
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(
+      columns = anteil_pop
+    )
+  ) %>%
+  tab_options(
+    table.width = pct(100),
+    row_group.background.color = "lightgrey"
+  ) %>%
+  cols_label(
+    name = "Name",
+    party = "Party",
+    job = "Profession",
+    n_gesamt = "All sentences",
+    n_pop = "Populist sentences",
+    anteil_pop = "Populism share",
+    beispiel = "Example sentence"
+  ) %>%
+  opt_table_font(
+    font = list(
+      google_font("Roboto"),
+      default_fonts()
+    )
+  )
+```
+
+
+## Role
+```{r}
+df_gesamt <- df_gesamt %>%
+mutate(role = ifelse(role == "R", "E", role)) # Recode R to E (typo in dataset)
+
+populismus_rolle <- df_gesamt %>%
+  filter(speaker_id != "e_unbekannt_01") %>%
+  group_by(role) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+ggplot(populismus_rolle, aes(x = role, y = populismus_share, fill = role)) +
+  geom_col(width = 0.7) +
+  labs(
+    title = "Populism share by role (overall)",
+    x = "Role",
+    y = "Populism share"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+######### E(6.55%) > TN(5.49%) > Mod (3.67%)
+```
+
+### Role per broadcast
+
+```{r}
+# per broadcast:
+populismus_rolle_sendung <- df_gesamt %>%
+  filter(speaker_id != "e_unbekannt_01") %>%
+  group_by(role, sendung) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# 1. Aggregation: Populism share per role and broadcast, per episode
+populismus_box <- df_gesamt %>%
+  filter(speaker_id != "e_unbekannt_01") %>%
+  group_by(role, sendung, show_id) %>%
+  summarise(
+    populismus_share = sum(populismus, na.rm = TRUE) / n(),
+    .groups = "drop"
+  )
+
+# 2. Boxplot: Distribution by role and broadcast (without time period)
+ggplot(populismus_box, aes(x = role, y = populismus_share, fill = sendung)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8), alpha = 0.3, size = 1) +
+  labs(
+    title = "Populism share by role and broadcast (boxplot, all time periods)",
+    x = "Role",
+    y = "Populism share",
+    fill = "Broadcast"
+  ) +
+  theme_minimal()
+```
+
+### Moderation
+
+```{r}
+# Broadcast
+df_gesamt %>%
+   group_by(sendung) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count
+  )  %>%
+  arrange(desc(populismus_share))
+
+########### overall without moderator ZDF
+# Populism share of moderation (without moderator Z, overall)
+mod_pop_gesamt <- df_gesamt %>%
+  filter(role == "Moderation", name != "Moderator Z") %>%
+   group_by(name) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count
+  )  %>%
+  arrange(desc(populismus_share))
+# Louis Klamroth (2.80%) Markus Lanz (3.45%) Maybrit Ilnner (4.94%)
+
+## Table 
+# Create gt table
+mod_pop_gesamt_gt <- mod_pop_gesamt %>%
+  gt() %>%
+  tab_header(
+    title = md("Populism share of moderation"),
+    subtitle = "Number of populist sentences, total sentences and share"
+  ) %>%
+  fmt_percent(
+    columns = populismus_share,
+    decimals = 1
+  ) %>%
+  cols_label(
+    name = "Moderator",
+    populismus_count = "Populist sentences",
+    total_count = "All sentences",
+    populismus_share = "Populism share"
+  ) %>%
+  opt_row_striping() %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_options(
+    table.font.size = px(14),
+    heading.title.font.size = px(18),
+    heading.subtitle.font.size = px(15)
+  )
+
+# Save
+# Save as HTML
+gtsave(mod_pop_gesamt_gt, "mod_pop_gesamt_gt.html")
+
+# Save HTML as PNG
+webshot("mod_pop_gesamt_gt.html", "mod_pop_gesamt_gt.png", zoom = 2)
+```
+
+#### Significance test of differences 
+```{r}
+table_mod <- df_gesamt %>%
+  filter(role == "Moderation", name %in% c("Maybrit Illner", "Markus Lanz", "Louis Klamroth")) %>%
+  mutate(pop = ifelse(populismus == 1, "populistisch", "nicht_populistisch")) %>%
+  count(name, pop) %>%
+  tidyr::pivot_wider(names_from = pop, values_from = n, values_fill = 0)
+
+# Build contingency table
+mat <- as.matrix(table_mod[,-1])
+rownames(mat) <- table_mod$name
+
+# Chi-square test
+chisq.test(mat) # highly significant differences
+
+### pairwise comparison
+counts <- c(266, 345, 169)         # Populist sentences
+totals <- c(5390, 9993, 6025)      # Total sentences
+names_vec <- c("Maybrit Illner", "Markus Lanz", "Louis Klamroth")
+
+# Pairwise comparison of populism shares
+pairwise.prop.test(
+  x = counts,
+  n = totals,
+  p.adjust.method = "holm",  # Or "bonferroni", "fdr" etc.
+  alternative = "two.sided"
+) 
+# All three moderations differ significantly in the share of populist sentences (p < 0.05 for all comparisons) (Holm)
+```
+
+
+#### Explanation approach: high populism shares Illner: guest matching 
+
+```{r}
+# Populism share moderation per episode
+mod_pop_by_episode <- df_gesamt %>%
+ filter(role == "Moderation", name != "Moderator Z") %>%
+  group_by(show_id) %>%
+  summarise(
+    mod_pop_count = sum(populismus, na.rm = TRUE),
+    mod_total = n(),
+    mod_pop_share = mod_pop_count / mod_total,
+    .groups = "drop"
+  )
+
+# Guest list per episode
+gaeste_by_episode <- df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(show_id) %>%
+  summarise(gaeste = paste(unique(name), collapse = "; "), .groups = "drop")
+
+# Combine the two tables
+analysis_df <- mod_pop_by_episode %>%
+  left_join(gaeste_by_episode, by = "show_id")
+
+# "Long" format: each guest per episode as separate row
+guest_long <- analysis_df %>%
+  separate_rows(gaeste, sep = "; ") %>%
+  rename(guest = gaeste)
+
+# Average moderation populism per guest
+gast_pop <- guest_long %>%
+  group_by(guest) %>%
+  summarise(
+    n_auftritte = n(),
+    mean_mod_pop_share = mean(mod_pop_share, na.rm = TRUE)
+  ) %>%
+  arrange(desc(mean_mod_pop_share))
+
+# Visualization: Top 10 guests
+gast_pop %>%
+  filter(n_auftritte >= 3) %>% # only guests with at least 3 appearances
+  top_n(10, mean_mod_pop_share) %>%
+  ggplot(aes(x = reorder(guest, mean_mod_pop_share), y = mean_mod_pop_share)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Average populism share of moderation by guest",
+       x = "Guest",
+       y = "Populism share moderation (mean)") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal()
+
+
+# Populism share moderation per guest and moderator
+gast_pop_moderator <- df_gesamt %>%
+  filter(role == "Moderation") %>%
+  group_by(show_id, moderator = name) %>%
+  summarise(
+    mod_pop_count = sum(populismus, na.rm = TRUE),
+    mod_total = n(),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    df_gesamt %>%
+      filter(role == "TN") %>%
+      group_by(show_id) %>%
+      summarise(gaeste = paste(unique(name), collapse = "; "), .groups = "drop"),
+    by = "show_id"
+  ) %>%
+  separate_rows(gaeste, sep = "; ") %>%
+  rename(guest = gaeste)
+
+# Averages per guest and moderator
+vergleich <- gast_pop_moderator %>%
+  group_by(moderator, guest) %>%
+  summarise(mean_pop_share = mean(mod_pop_count / mod_total, na.rm = TRUE), .groups = "drop")
+
+
+
+# Comparison table "How populist is moderation on average when guest X sits with Illner – compared to other moderators?"
+
+# 1. Average populism share of moderation per guest (across all shows)
+gast_pop_all <- guest_long %>%
+  group_by(guest) %>%
+  summarise(
+    mean_mod_pop_share = mean(mod_pop_share, na.rm = TRUE),
+    n_auftritte = n()
+  )
+
+# 2. Shows with Illner as moderator
+illner_shows <- df_gesamt %>%
+  filter(name == "Maybrit Illner", role == "Moderation") %>%
+  distinct(show_id)
+
+# 3. Which guests how often at Illner
+illner_guests_only <- guest_long %>%
+  filter(show_id %in% illner_shows$show_id) %>%
+  group_by(guest) %>%
+  summarise(n_illner = n())
+
+# 4. Which guests how often with other moderators
+andere_guests_only <- guest_long %>%
+  filter(!(show_id %in% illner_shows$show_id)) %>%
+  group_by(guest) %>%
+  summarise(n_andere = n())
+
+# 5. Merge & create comparison table
+gast_illner_impact <- gast_pop_all %>%
+  left_join(illner_guests_only, by = "guest") %>%
+  left_join(andere_guests_only, by = "guest") %>%
+  tidyr::replace_na(list(n_illner = 0, n_andere = 0))
+
+# 6. Weighted average of populism shares for guests at Illner and others
+mean_pop_illner <- gast_illner_impact %>%
+  filter(n_illner > 0) %>%
+  summarise(
+    gew_pop = weighted.mean(mean_mod_pop_share, n_illner, na.rm = TRUE)
+  ) %>% pull(gew_pop)
+
+mean_pop_andere <- gast_illner_impact %>%
+  filter(n_andere > 0) %>%
+  summarise(
+    gew_pop = weighted.mean(mean_mod_pop_share, n_andere, na.rm = TRUE)
+  ) %>% pull(gew_pop)
+
+# 7. Output of results
+cat("Weighted average populism share of moderation (based on guest list):\n")
+cat("Maybrit Illner:", scales::percent(mean_pop_illner, accuracy = 0.1), "\n")
+cat("Other moderators:", scales::percent(mean_pop_andere, accuracy = 0.1), "\n")
+
+# 8. Optional: Visualization
+gast_illner_impact %>%
+  mutate(gruppe = case_when(
+    n_illner > 0 & n_andere == 0 ~ "Illner",
+    n_illner > 0 & n_andere > 0 ~ "Both",
+    n_illner == 0 & n_andere > 0 ~ "Lanz and HaF",
+    TRUE ~ "None"
+  )) %>%
+  filter(gruppe != "None") %>%
+  ggplot(aes(x = reorder(guest, mean_mod_pop_share), y = mean_mod_pop_share, fill = gruppe)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Populism share of moderation by guest and broadcast format",
+    x = "Guest", y = "Average populism share (moderation)"
+  ) +
+  theme_minimal()
+
+## 8.1 clearer Top 15 plot
+library(scales)
+gast_illner_impact %>%
+  mutate(gruppe = case_when(
+    n_illner > 0 & n_andere == 0 ~ "Illner",
+    n_illner > 0 & n_andere > 0 ~ "Both",
+    n_illner == 0 & n_andere > 0 ~ "Lanz and HaF",
+    TRUE ~ "None"
+  )) %>%
+  filter(gruppe != "None") %>%
+  slice_max(mean_mod_pop_share, n = 10) %>%
+  ggplot(aes(x = reorder(guest, mean_mod_pop_share), y = mean_mod_pop_share, fill = gruppe)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Top 15 Guests: Populism share of moderation by broadcast format",
+    x = "Guest", y = "Average populism share of moderation (in %)"
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +  # percent
+  theme_minimal()
+
+
+############ Top 10
+
+farben <- c("Illner" = "#7AC7DF", "Both" = "#2E8B57", "Lanz and HaF" = "#C73E1D")
+
+gast_illner_impact <- gast_illner_impact %>%
+   mutate(guest= ifelse(guest == "Manuele Schwesig", "Manuela Schwesig", guest)) %>%  # correct name
+  mutate(gruppe = case_when(
+    n_illner > 0 & n_andere == 0 ~ "Illner",
+    n_illner > 0 & n_andere > 0 ~ "Both",
+    n_illner == 0 & n_andere > 0 ~ "Lanz and HaF",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(gruppe)) %>%
+  slice_max(mean_mod_pop_share, n = 10) %>%
+  ggplot(aes(x = reorder(guest, mean_mod_pop_share), y = mean_mod_pop_share, fill = gruppe)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(
+    name = "Broadcast format",
+    values = farben,
+    labels = c("Illner" = "exclusively with Illner", "Lanz and HaF" = "only Lanz or HaF", "Both" = "not exclusively Illner")
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Top 10 guests with highest populism share of moderation",
+    subtitle = "Distinction by broadcast format",
+    x = "Guest",
+    y = "Populism share of moderation"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "right",  # <--- this is new!
+    legend.title = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 15, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.text.y = element_text(size = 11),
+    panel.grid.major.y = element_blank()
+  )
+
+
+# Save
+ggsave("gast_illner_impact.png", gast_illner_impact, width = 10, height = 6, dpi = 300)
+ggsave("gast_illner_impact.pdf", gast_illner_impact, width = 10, height = 6)
+
+
+
+# with number of appearances
+gast_illner_impact %>%
+  mutate(gruppe = case_when(
+    n_illner > 0 & n_andere == 0 ~ "Illner",
+    n_illner > 0 & n_andere > 0 ~ "Both",
+    n_illner == 0 & n_andere > 0 ~ "Lanz and HaF",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(gruppe)) %>%
+  slice_max(mean_mod_pop_share, n = 10) %>%
+  ggplot(aes(x = reorder(guest, mean_mod_pop_share), y = mean_mod_pop_share, fill = gruppe)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = n_auftritte), 
+            hjust = -0.1, size = 4) +   # <--- HERE the appearances are displayed!
+  coord_flip() +
+  scale_fill_manual(
+    name = "Guest group",
+    values = farben,
+    labels = c("Illner" = "only Maybrit Illner", "Lanz and HaF" = "only Lanz or HaF", "Both" = "not exclusively Maybrit Illner")
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Top 10 guests with highest populism share of moderation",
+    subtitle = "Distinction by broadcast format (number = appearances)",
+    x = "Guest",
+    y = "Populism share of moderation"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 15, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.text.y = element_text(size = 11),
+    panel.grid.major.y = element_blank()
+  )
+```
+
+## Professions
+
+### per broadcast
+```{r}
+job_pop_sendung <- df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(sendung, job) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE) # Mean ONLY of populist sentences
+  ) %>%
+  arrange(sendung, desc(anteil_pop))
+```
+
+#### Raincloud graph
+```{r}
+library(ggdist)
+df_person_job <- df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(name, job) %>%
+  summarise(
+    anteil_pop = mean(populismus, na.rm = TRUE)
+  )
+
+## Version 1
+# Means and n per group
+labels <- df_person_job %>%
+  group_by(job) %>%
+  summarise(
+    mean_anteil = mean(anteil_pop, na.rm = TRUE),
+    n = n(),
+    max_anteil = max(anteil_pop, na.rm = TRUE)
+  )
+
+# Plot with mean (black) and n-label (colored) ####good version now
+ggplot(df_person_job, aes(x = job, y = anteil_pop, fill = job)) +
+  ggdist::stat_halfeye(
+    adjust = .5, 
+    width = .6, 
+    justification = -.2, 
+    .width = 0, 
+    point_colour = NA
+  ) +
+  geom_boxplot(
+    width = .15,
+    outlier.color = NA,
+    color = "black"   # Black-bordered boxplots
+  ) +
+  ggdist::stat_dots(
+    side = "left",
+    justification = 1.12,
+    binwidth = .01,
+    dotsize = 0.1
+  ) +
+  # Mean as black number on the midline of the boxplots
+geom_text(
+  data = labels,
+  aes(x = job, y = mean_anteil + 0.005, label = round(mean_anteil, 3)),
+  inherit.aes = FALSE,
+  color = "black",
+  fontface = "bold",
+  size = 4,
+  angle = 90,    # Vertical!
+  vjust = 0.5
+)+
+  # n-label on right edge in group color
+  geom_text(
+    data = labels,
+    aes(x = job, y = max_anteil + 0.01, label = paste0("n = ", n), color = job),
+    inherit.aes = FALSE,
+    family = "Roboto Mono",
+    size = 4,
+    hjust = 0
+  ) +
+  labs(
+    title = "Distribution of populist statements share by profession",
+    x = "Profession",
+    y = "Share of populist statements",
+    caption = "n = Number of individual talk show guests assigned to the respective profession."
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+## Version 2: monochrome 
+ggplot(df_person_job, aes(x = job, y = anteil_pop)) +
+  ggdist::stat_halfeye(
+    adjust = .5, 
+    width = .6, 
+    justification = -.2, 
+    .width = 0, 
+    point_colour = NA,
+    fill = "steelblue",   # Violin/halfeye in ONE color
+    alpha = 0.5
+  ) +
+  geom_boxplot(
+    width = .15,
+    outlier.color = NA,
+    color = "black",
+    fill = "steelblue"
+  ) +
+  ggdist::stat_dots(
+    side = "left",
+    justification = 1.12,
+    binwidth = .01,
+    dotsize = 0.1,
+    fill = "steelblue"
+  ) +
+  # Mean as black number 
+  geom_text(
+    data = labels,
+    aes(x = job, y = mean_anteil + 0.005, label = round(mean_anteil, 3)),
+    inherit.aes = FALSE,
+    color = "black",
+    fontface = "bold",
+    size = 4,
+    angle = 90,
+    vjust = 0.5
+  ) +
+  # n-label on right edge in **black!**
+  geom_text(
+    data = labels,
+    aes(x = job, y = max_anteil + 0.01, label = paste0("n = ", n)),
+    inherit.aes = FALSE,
+    color = "black",          # <-- now in black!
+    family = "Roboto Mono",
+    size = 4,
+    hjust = 0
+  ) +
+  labs(
+    title = "Distribution of populist statements share by profession",
+    x = "Profession",
+    y = "Share of populist statements",
+    caption = "n = Number of individual talk show guests assigned to the respective profession."
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ ## Version 3: monochrome, optimized without means 
+ raincloud_job <- ggplot(df_person_job, aes(x = job, y = anteil_pop)) +
+  ggdist::stat_halfeye(
+    adjust = .5, 
+    width = .6, 
+    justification = -.2, 
+    .width = 0, 
+    point_colour = NA,
+    fill = "steelblue",   # Violin/halfeye in ONE color
+    alpha = 0.5
+  ) +
+  geom_boxplot(
+    width = .15,
+    outlier.color = NA,
+    color = "black",
+    fill = "steelblue", alpha = 0.7
+  ) +
+  ggdist::stat_dots(
+    side = "left",
+    justification = 1.12,
+    binwidth = .01,
+    dotsize = 0.1,
+    fill = "steelblue"
+  ) +
+  # n-label on right edge in **black!**
+  geom_text(
+    data = labels,
+    aes(x = job, y = max_anteil + 0.01, label = paste0("n = ", n)),
+    inherit.aes = FALSE,
+    color = "black",        
+    family = "sans",
+    size = 4,
+    hjust = 0
+  ) +
+  labs(
+    title = "Distribution of populist statements share by profession",
+    subtitle = "Raincloud plots with boxplots and distribution density of individual values",
+    x = "Profession of guests",
+    y = "Share of populist statements (%)",
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(size =17, face = "bold"),
+    plot.subtitle = element_text(size = 13),
+    axis.text.y = element_text(size = 12),
+    panel.grid.major.y = element_line(color = "grey90"),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.title.x = element_text(margin = margin(t = 25)) 
+  )
+
+ggsave("raincloud_job.png", raincloud_job, width = 10, height = 6, dpi = 300)
+ggsave("raincloud_job.pdf", raincloud_job, width = 10, height = 6)
+
+## Version 4: Points differently
+
+ggplot(df_person_job, aes(x = job, y = anteil_pop, fill = job, color = job)) +
+  ggdist::stat_halfeye(
+    adjust = .5, 
+    width = .6, 
+    .width = 0, 
+    justification = -.2, 
+    point_colour = NA
+  ) +
+  geom_boxplot(
+    width = .15,
+    outlier.shape = NA
+  ) +
+  gghalves::geom_half_point(
+    aes(color = job), # Color points by profession
+    side = "l",
+    range_scale = .4,
+    alpha = .6,      # Adjust transparency as desired
+    size = 2         # Adjust point size as desired
+  ) +
+  labs(
+    title = "Distribution of populist statements share by profession",
+    x = "Profession",
+    y = "Share of populist statements",
+    caption = "n = Number of individual talk show guests assigned to the respective profession."
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+#### Focus on media/culture, politics and business in the formats
+
+```{r}
+# First subset media/culture, politics and business
+job_pop_sendung_subset <- job_pop_sendung %>%
+  filter(job %in% c("Politik", "Medien und Kultur", "Wirtschaft"))
+
+# Plot 1: Focus politics
+plot_politik <- job_pop_sendung_subset %>%
+  mutate(highlight = ifelse(job == "Politik", "highlight", "normal")) %>%
+  ggplot(aes(x = sendung, y = anteil_pop, fill = highlight, group = job)) +
+  geom_col(position = position_dodge2(preserve = "single"), aes(alpha = highlight)) +
+  scale_fill_manual(values = c("highlight" = "#377eb8", "normal" = "grey80")) +
+  scale_alpha_manual(values = c("highlight" = 1, "normal" = 0.6)) +
+  labs(title = "Focus: Politics", x = "Broadcast", y = "Share of populist statements") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Plot 2: Focus media and culture
+plot_medien <- job_pop_sendung_subset %>%
+  mutate(highlight = ifelse(job == "Medien und Kultur", "highlight", "normal")) %>%
+  ggplot(aes(x = sendung, y = anteil_pop, fill = highlight, group = job)) +
+  geom_col(position = position_dodge2(preserve = "single"), aes(alpha = highlight)) +
+  scale_fill_manual(values = c("highlight" = "#e41a1c", "normal" = "grey80")) +
+  scale_alpha_manual(values = c("highlight" = 1, "normal" = 0.6)) +
+  labs(title = "Focus: Media and culture", x = "Broadcast", y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Plot 3: Focus business
+plot_wirtschaft <- job_pop_sendung_subset %>%
+  mutate(highlight = ifelse(job == "Wirtschaft", "highlight", "normal")) %>%
+  ggplot(aes(x = sendung, y = anteil_pop, fill = highlight, group = job)) +
+  geom_col(position = position_dodge2(preserve = "single"), aes(alpha = highlight)) +
+  scale_fill_manual(values = c("highlight" = "#4daf4a", "normal" = "grey80")) +
+  scale_alpha_manual(values = c("highlight" = 1, "normal" = 0.6)) +
+  labs(title = "Focus: Business", x = "Broadcast", y = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Display plots side by side
+plot_grid(plot_politik, plot_medien, plot_wirtschaft, nrow = 1)
+```
+
+#### Significance: profession media/culture, politics and business
+
+```{r}
+############ Significance 
+## ANOVA 
+df_satz <- df_gesamt %>%
+  filter(role == "TN", job %in% c("Politik", "Medien und Kultur", "Wirtschaft"))
+
+for (s in unique(df_satz$sendung)) {
+  cat("\n---", s, "---\n")
+  print(summary(aov(populismus ~ job, data = filter(df_satz, sendung == s))))
+}
+### In all three cases, p-value << 0.05 (e.g., 0.00083, 1.58e-09, 4.5e-09): There are significant differences in populism share between professional groups in all three broadcasts
+# The professional group (job) explains a significant proportion of the variance in populism (populismus) within each broadcast.
+
+
+# Which groups
+for (s in unique(df_satz$sendung)) {
+  cat("\n---", s, "TukeyHSD ---\n")
+  model <- aov(populismus ~ job, data = filter(df_satz, sendung == s))
+  print(TukeyHSD(model))
+}
+# Media and culture usually has the highest populism share (except in HaF, where there's no difference to politics). Business is least populist in HaF; in the other broadcasts there are no significant differences to politics. Politics is significantly less populist than "media and culture" in "Illner" and "Lanz".
+
+### Content-related
+# Why does "media and culture" often show higher populism shares? (e.g., media staging, role understanding)
+# Why is "business" so much less populist in one broadcast? (e.g., expert status, neutrality obligation)
+# Politics: Diplomacy, stability -> parties question whether government or not
+```
+
+#### Content-related: Heatmap
+
+```{r}
+professions <- unique(df_gesamt$job)
+
+# Stopwords
+df_pop <- df_gesamt %>%
+  filter(pop_max > schwelle_95)
+
+# 1. Build extended stopword list
+de_stop <- stopwords("de")
+filler_words <- c(
+  "also","auch","bloß","denn","doch","eben","eigentlich","etwa","halt","ja","mal","nur",
+  "schon","vielleicht","wohl","quasi","irgendwie","sozusagen","tja","naja","ne","mein","dein",
+  "okay","klar","gut","überhaupt","eventuell","bestimmt","immerhin","sowieso","bisschen","sagen",
+  "sogar","natürlich","eher","ziemlich","fast","wirklich","offenbar","meist","meistens","jedenfalls",
+  "übrigens","ebenfalls","je","gar","recht","relativ", "dass"
+)
+custom_stopwords <- c("herr","frau","Herr","Frau")
+speaker_tags <- c(paste0("s", 1:99), paste0("s", sprintf("%02d", 1:99)))
+all_stopwords <- unique(c(de_stop, filler_words, custom_stopwords, speaker_tags))
+all_stopwords_df <- data.frame(word = all_stopwords, stringsAsFactors = FALSE)
+
+# 2. Remove speaker tags per regex from sentence text
+remove_s_speaker_words <- function(text) {
+  gsub("\\bs\\d+\\b", "", text, ignore.case = TRUE)
+}
+df_pop$sentences...20 <- sapply(df_pop$sentences...20, remove_s_speaker_words)
+
+# 3. Tokenize, remove numbers and stopwords, calculate statistics
+df_words <- df_pop %>%
+  unnest_tokens(word, sentences...20) %>%
+  filter(!grepl("^[0-9]+$", word)) %>%              # <--- excludes pure numbers!
+  anti_join(all_stopwords_df, by = "word") %>%
+  group_by(word) %>%
+  summarise(
+    freq = n(),
+    mean_pop = mean(pop_max, na.rm = TRUE))
+
+# Empty list for results
+top_words_per_job <- list()
+
+for (profession in professions) {
+  df_sub <- df_pop %>%
+    filter(job == profession, populismus == TRUE)
+  
+  words <- df_sub %>%
+    unnest_tokens(word, sentences...20) %>%
+    anti_join(all_stopwords_df, by = "word") %>%
+    filter(!grepl("^[0-9]+$", word)) %>%  # Removes pure numbers
+    count(word, sort = TRUE)
+  
+  # Save top 10
+  top_words_per_job[[profession]] <- head(words, 10)
+}
+
+# Top-10 words for all professions as dataframe
+top_words_all <- bind_rows(
+  lapply(names(top_words_per_job), function(job) {
+    d <- top_words_per_job[[job]]
+    d$job <- job
+    d
+  })
+)
+
+# Optional: consider only top 20 words overall
+top_gesamt <- top_words_all %>%
+  group_by(word) %>%
+  summarise(gesamt = sum(n)) %>%
+  arrange(desc(gesamt)) %>%
+  slice(1:20)
+
+top_words_filtered <- top_words_all %>%
+  filter(word %in% top_gesamt$word) %>%
+  left_join(top_gesamt, by = "word")
+
+top_words_filtered <- top_words_filtered %>%
+  filter(job != "unbekannt")
+
+
+# Additional info
+## Calculate additional info
+n_professions <- length(unique(top_words_filtered$job))
+n_words <- length(unique(top_words_filtered$word))
+professions_list <- paste(unique(top_words_filtered$job), collapse = ", ")
+
+## How many sentences were evaluated per profession?
+sentence_count <- df_pop %>%
+  filter(populismus == TRUE, job %in% unique(top_words_filtered$job)) %>%
+  group_by(job) %>%
+  summarise(Sentences = n())
+
+# Version 1
+ggplot(top_words_filtered, aes(x = job, y = reorder(word, gesamt), fill = n)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(x = "Profession", y = "Word", fill = "Frequency", title = "Top populism terms by profession") +
+  theme_minimal()
+
+
+# Version 2
+ggplot(top_words_filtered, aes(x = job, y = reorder(word, gesamt), fill = n)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(
+    title = "Top populism terms by profession",
+    subtitle = paste0(
+      n_words, " most frequent words (populist sentences), ",
+      n_professions, " profession groups: ", professions_list
+    ),
+    caption = paste(
+      "Filter: German-language and extended stopwords, pure numbers removed.\n",
+      "Basis: populist sentences from talk shows, top-10 words per profession, consolidated to 20 most frequent overall.",
+      "\nNumber of evaluated populist sentences per profession:\n",
+      paste(sentence_count$job, sentence_count$Sentences, sep=": ", collapse=" | ")
+    ),
+    x = "Profession",
+    y = "Word",
+    fill = "Frequency"
+  ) +
+  theme_minimal()
+
+job_labels <- c(
+  "Expert",
+  "Media\nand Culture",
+  "Public",
+  "Politics",
+  "Business",
+  "Science"
+)
+
+
+heatmap_job <- ggplot(top_words_filtered, aes(x = job, y = reorder(word, gesamt), fill = n)) +
+  geom_tile(color = "white", linewidth = 0.5, alpha = 0.8) +
+  scale_fill_distiller(palette = "YlOrRd", name = "Word frequency", na.value = "white") +
+  labs(
+    title = "Most frequent populist words by profession",
+    subtitle = "Distribution of 20 most-mentioned words in populist statements",
+    x = "Profession of guests",       
+    y = "Word"
+  ) +
+      scale_x_discrete(labels = job_labels) + 
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(size = 17, face = "bold"),
+    plot.subtitle = element_text(size = 13),
+    axis.text.y = element_text(size = 12),
+    axis.title.y = element_text(margin = margin(t = 25)),
+    panel.grid = element_blank(), 
+    legend.position = "right",
+    legend.box.margin = margin(0, 40, 0, 0),
+    legend.title.align = 0.5,
+    plot.caption = element_text(size = 10),
+    axis.title.x = element_text(margin = margin(t = 25)),
+    plot.margin = margin(20, 30, 20, 20) # top, right, bottom, left (in pt)
+  ) +
+  guides(fill = guide_colorbar(
+    title.position = "top", 
+    title.hjust = 0.5,
+    barwidth = 0.7,
+    barheight = 16
+  ))
+
+ggsave("heatmap_job.png", heatmap_job, width = 10, height = 6, dpi = 300)
+ggsave("heatmap_job.pdf", heatmap_job, width = 10, height = 6)
+ggsave("heatmap_job.pdf", width = 12, height = 7) 
+
+
+```
+
+## Party affiliation
+
+```{r}
+# only participants, politics, Union combined due to federal level
+party_pop <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), !(party %in% c("NA", "Ausland"))) %>%
+  mutate(
+    party_grouped = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(party_grouped) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE)
+  ) %>%
+  arrange(desc(anteil_pop))
+# AfD, Left, BSW leading
+```
+
+#### Raincloud graph
+
+```{r}
+df_person_party <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), !(party %in% c("NA", "Ausland"))) %>%
+  mutate(
+    party_grouped = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(name, party_grouped) %>%
+  summarise(
+    anteil_pop = mean(populismus, na.rm = TRUE)
+  )
+
+# Means and n per group
+labels <- labels <- df_person_party %>%
+  group_by(party_grouped) %>%
+  summarise(
+    mean_anteil = mean(anteil_pop, na.rm = TRUE),
+    n = n(),
+    max_anteil = max(anteil_pop, na.rm = TRUE)
+  )
+
+# Version 1
+ggplot(df_person_party, aes(x = party_grouped, y = anteil_pop, fill = party_grouped)) +
+  ggdist::stat_halfeye(
+    adjust = .5, 
+    width = .6, 
+    justification = -.2, 
+    .width = 0, 
+    point_colour = NA
+  ) +
+  geom_boxplot(
+    width = .15,
+    outlier.color = NA,
+    color = "black"
+  ) +
+  ggdist::stat_dots(
+    side = "left",
+    justification = 1.12,
+    binwidth = .01,
+    dotsize = 0.1
+  ) +
+  # Mean as black number
+  geom_text(
+    data = labels,
+    aes(x = party_grouped, y = mean_anteil + 0.005, label = round(mean_anteil, 3)),
+    inherit.aes = FALSE,
+    color = "black",
+    fontface = "bold",
+    size = 4,
+    angle = 90,
+    vjust = 0.5
+  ) +
+  # n-label on right edge in party color
+  geom_text(
+    data = labels,
+    aes(x = party_grouped, y = max_anteil + 0.01, label = paste0("n = ", n), color = party_grouped),
+    inherit.aes = FALSE,
+    family = "Sans",
+    size = 4,
+    hjust = 0
+  ) +
+  scale_fill_manual(values = parteifarben) +
+  scale_color_manual(values = parteifarben) +
+  labs(
+    title = "Populism share by party (per politician)",
+    x = "Party",
+    y = "Populism share (mean per person)",
+    caption = "n = Number of individual politicians per party"
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+
+
+# Version 2: more transparent colors, without means with n
+raincloud_party <-  ggplot(df_person_party, aes(x = party_grouped, y = anteil_pop, fill = party_grouped)) +
+  ggdist::stat_halfeye(
+    adjust = .5, width = .6, justification = -.2, .width = 0, 
+    point_colour = NA, alpha = 0.35
+  ) +
+  geom_boxplot(
+    width = .18, outlier.color = NA, fill = "white", color = "black", 
+    alpha = 0.8
+  ) +
+  ggdist::stat_dots(
+    side = "left", justification = 1.13, binwidth = .01, dotsize = 0.12, color = "grey20"
+  ) +
+  geom_text(
+    data = labels,
+    aes(x = party_grouped, y = max_anteil + 0.015, label = paste0("n = ", n)),
+    inherit.aes = FALSE,
+    color = "black", size = 3.5, hjust = 0.5
+  ) +
+  scale_fill_manual(values = parteifarben) +
+  scale_x_discrete(labels = c(
+    "AfD" = "AfD",
+    "BSW" = "BSW",
+    "die Grünen" = "B90/Greens",
+    "FDP" = "FDP",
+    "FW" = "FW",
+    "Linke" = "The Left",
+    "SPD" = "SPD",
+    "Union" = "Union"
+  )) +
+  labs(
+    title = "Distribution of populist statements share by party affiliation",
+    subtitle = "Raincloud plots with boxplots and distribution density of individual values",
+    x = "Party affiliation of guests",
+    y = "Share of populist statements (%)"
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), expand = expansion(mult = c(0, 0.08))) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(size = 11, hjust = 1),
+    panel.grid.major.y = element_line(color = "grey90"),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    axis.title.x = element_text(margin = margin(t = 25)) 
+  )
+
+  ggsave("raincloud_party.png", raincloud_party, width = 10, height = 6, dpi = 300)
+  ggsave("raincloud_party.pdf", raincloud_party, width = 10, height = 6)
+```
+
+
+### per broadcast
+```{r}
+party_pop_sendung <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), !(party %in% c("NA", "Ausland"))) %>%
+  mutate(
+    party_grouped = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(party_grouped, sendung) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(party_grouped, desc(anteil_pop))
+
+
+# Point plot
+ggplot(party_pop_sendung, aes(x = sendung, y = anteil_pop, color = party_grouped)) +
+  geom_point(size = 3, alpha = 0.7, position = position_jitter(width = 0.2)) +
+  scale_color_manual(values = parteifarben) +
+  labs(
+    title = "Populism share by broadcast and party",
+    x = "Broadcast",
+    y = "Populism share"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+### Particularly interesting: much more populist statements from BSW and Left in HaF compared to Illner and Lanz
+
+
+ggplot(party_pop_sendung, aes(x = party_grouped, y = anteil_pop, fill = party_grouped)) +
+  geom_col(width = 0.7) +
+  facet_wrap(~ sendung) +
+  scale_fill_manual(values = parteifarben) +
+  labs(
+    title = "Populism share by party and broadcast",
+    x = "Party",
+    y = "Share of populist sentences"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+
+# Heatmap
+ggplot(party_pop_sendung, aes(x = sendung, y = party_grouped, fill = anteil_pop)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "#E3000F", name = "Populism share") +
+  labs(title = "Populism share: Party x Broadcast", x = "Broadcast", y = "Party") +
+  theme_minimal(base_size = 13)
+```
+
+### Scatterplot: Individuals in parties per broadcast
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+
+# Share of populist sentences per person and broadcast
+df_politicians <- df_gesamt %>%
+  filter(
+    role == "TN",
+    job == "Politik",
+    !party %in% c("Ausland", "NA"),
+    !is.na(party)
+  ) %>%
+  mutate(
+    party = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(name, party, sendung) %>%
+  summarise(
+    n_sentences = n(),                                  # Total sentences/utterances
+    n_pop_sentences = sum(populismus == 1, na.rm = TRUE), # Populist sentences
+    pop_sentence_share = n_pop_sentences / n_sentences,    # Share of populist sentences
+    mean_Anti_Elitism = mean(Anti_Elitism, na.rm = TRUE),
+    mean_People_Centrism = mean(People_Centrism, na.rm = TRUE),
+    n = n()
+  ) %>%
+  ungroup() %>%
+  mutate(
+    lastname = stringr::word(name, -1)
+  )
+
+# Top 10 politicians per party & broadcast by populism share
+df_top5 <- df_politicians %>%
+  group_by(party, sendung) %>%
+  arrange(desc(pop_sentence_share)) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# Version 1: Populism share as transparency/size/color possible!
+ggplot(df_politicians, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point() +
+  geom_text(
+    data = df_top5,
+    aes(label = lastname),
+    hjust = 0, nudge_x = 0.01,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_alpha_continuous(range = c(0.3, 1), name = "Populism share (sentences)") +
+  facet_grid(party ~ sendung) +
+  scale_color_manual(values = parteifarben) +
+  labs(
+    x = "Anti-Elitism",
+    y = "People-Centrism",
+    color = "Party",
+    size = "Mentions",
+    alpha = "Populism share (sentences)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    strip.text.y = element_blank()
+  )
+
+### Take-aways
+### Wagenknecht at HaF much higher anti-elite
+# Populism is overall rare (in talk shows, among most politicians).
+# Individual politicians (esp. from AfD, BSW, Left) show significantly higher populism shares.
+# Distribution varies depending on broadcast and party.
+# The majority of established parties (SPD, CDU/CSU, Greens, FDP) express themselves very rarely in populist ways in talk shows.
+# BSW: Wagenknecht is the central, outstanding point: She has comparatively high populism share across all shows (larger point size). She also ranks very high on both anti-elitism and people-centrism, meaning she expresses particularly populist rhetoric and uses corresponding rhetorical elements. Other BSW representatives (e.g., Ali, Lafontaine, Masi) sometimes have lower populism shares and vary in their values – but the overall spread remains high.
+# The strong spread of populist elements among the Left is due to the heterogeneity of the other left-wing politicians. The large spread in BSW is mainly caused by Wagenknecht herself and possibly one or two other actors in your dataset.
+# Left and BSW: Different party factions and individual profiles lead to a wide range of populist rhetoric.
+
+
+# Version 2
+library(ggrepel)
+
+scatterplot_party_format <- ggplot(df_politicians, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point() +
+  geom_text_repel(
+    data = df_top5,
+    aes(label = lastname),
+    size = 4, 
+    max.overlaps = 10,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_alpha_continuous(range = c(0.1, 1), name = "Populism share (sentences)") +
+  facet_grid(party ~ sendung) +
+  scale_color_manual(values = parteifarben,
+      labels = c(
+      "AfD" = "AfD",
+      "BSW" = "BSW",
+      "die Grünen" = "B90/Greens",
+      "FDP" = "FDP",
+      "FW" = "FW",
+      "Linke" = "The Left",
+      "SPD" = "SPD",
+      "Union" = "Union"
+    )) +
+  labs(
+    x = "Average Anti-Elitism Score",
+    y = "Average People-Centrism Score",
+    color = "Party",
+    size = "Number of sentences",
+    alpha = "Populism share (sentences)",
+    caption = "Points: politicians per broadcast. Size: number of sentences. Transparency: share of populist sentences.\nPopulism share = share of populist sentences among all sentences per politician and broadcast."
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    strip.text.y = element_blank()
+  )
+
+ggsave("scatterplot_party_format.png", scatterplot_party_format, width = 10, height = 6, dpi = 300)
+
+
+library(scales) # For percent_format()
+
+ggplot(df_politicians, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point() +
+  geom_text_repel(
+    data = df_top5,
+    aes(label = lastname),
+    size = 4, 
+    max.overlaps = 10,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_alpha_continuous(range = c(0.1, 1), name = "Populism share (sentences)") +
+  facet_grid(party ~ sendung) +
+  scale_color_manual(values = parteifarben,
+      labels = c(
+      "AfD" = "AfD",
+      "BSW" = "BSW",
+      "die Grünen" = "B90/Greens",
+      "FDP" = "FDP",
+      "FW" = "FW",
+      "Linke" = "The Left",
+      "SPD" = "SPD",
+      "Union" = "Union"
+    )) +
+  # AXES IN PERCENT:
+  scale_x_continuous(labels = percent_format(accuracy = 0.1), name = "Average Anti-Elitism Score (%)") +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1), name = "Average People-Centrism Score (%)") +
+  labs(
+    title = "Populism profiles of German politicians",
+    subtitle = "Scatterplot of mean populism scores by party and format",
+    color = "Party",
+    size = "Number of sentences",
+    alpha = "Populism share (sentences)",
+    caption = "Points: politicians per broadcast. Size: number of sentences. Transparency: share of populist sentences.\nPopulism share = share of populist sentences among all sentences per politician and broadcast."
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    strip.text.y = element_blank()
+  )
+
+
+#### final plot
+scatterplot_party_format_gr <- ggplot(df_politicians, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point() +
+  geom_text_repel(
+    data = df_top5,
+    aes(label = lastname),
+    size = 4, 
+    max.overlaps = 10,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_alpha_continuous(range = c(0.1, 1), name = "Populism share (sentences)") +
+  facet_grid(party ~ sendung) +
+  scale_color_manual(values = parteifarben,
+      labels = c(
+      "AfD" = "AfD",
+      "BSW" = "BSW",
+      "die Grünen" = "B90/Greens",
+      "FDP" = "FDP",
+      "FW" = "FW",
+      "Linke" = "The Left",
+      "SPD" = "SPD",
+      "Union" = "Union"
+    )) +
+  scale_y_continuous(
+    breaks = c(0.01, 0.05), 
+    labels = percent_format(accuracy = 0.1),
+    name = "Average People-Centrism Score (%)"
+  ) +
+  scale_x_continuous(
+    labels = percent_format(accuracy = 0.1),
+    name = "Average Anti-Elitism Score (%)"
+  ) +
+  labs(
+  title = "Populism profiles of German politicians",
+  subtitle = "Scatterplot of mean populism scores by party and format",
+    color = "Party affiliation",
+    size = "Number of sentences",
+    alpha = "Populism share of sentences"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 17, face = "bold"),
+    legend.position = "right",
+    strip.text.y = element_blank(),
+   axis.title.x = element_text(margin = margin(t = 25)) 
+  )
+
+ggsave("scatterplot_party_format_gr.png", width = 15, height = 9, dpi = 300)
+ggsave("raincloud_party.pdf", raincloud_party, width = 10, height = 6)
+```
+
+# Temporal progression
+
+## Time period definition
+```{r}
+# Which time periods are considered?
+# Rest April 2024 - November 2024 (01.04.24 - 05.11.24)
+# VF: November 24 - Dec 25 (06.11.24 - 31.12.24)
+# BTW: January 25 - Feb 25 (01.01.25 - 23.02.25)
+
+df_gesamt <- df_gesamt %>%
+  mutate(
+    zeitraum = case_when(
+      date >= as.Date("2024-04-01") & date <= as.Date("2024-11-05") ~ "Rest",
+      date >= as.Date("2024-11-06") & date <= as.Date("2024-12-31") ~ "Confidence vote",
+      date >= as.Date("2025-01-01") & date <= as.Date("2025-02-23") ~ "Federal election",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+## Overview
+```{r}
+# Join time period (if not already included)
+populismus_zeit <- df_gesamt %>%
+  group_by(date, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+ggplot(populismus_zeit, aes(x = date, y = populismus_share, color = zeitraum)) +
+  geom_line() +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(
+    title = "Populism share over time by time period",
+    x = "Date",
+    y = "Populism share"
+  ) +
+  theme_minimal()
+
+### Peak shortly before federal election, low during confidence vote, rest relatively constant
+```
+
+
+
+## per format
+```{r}
+# Calculation: share per broadcast and time period
+
+# Step 1: Calculate share per broadcast (episode) and time period
+pro_episode <- df_gesamt %>%
+  group_by(sendung, zeitraum, show_id, date) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+pro_episode$zeitraum <- factor(
+  pro_episode$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Boxplot with N integrated:
+
+# Table with N per show and time period
+n_table <- pro_episode %>%
+  group_by(sendung, zeitraum) %>%
+  summarise(N = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = zeitraum, values_from = N, values_fill = 0)
+
+# Build text for caption
+n_legend <- paste(
+  apply(n_table, 1, function(row) {
+    sprintf("%s: Rest=%s, Confidence vote=%s, Federal election=%s",
+            row["sendung"], row["Rest"], row["Confidence vote"], row["Federal election"])
+  }),
+  collapse = "\n"
+)
+
+# Version 1
+ggplot(pro_episode, aes(x = zeitraum, y = populismus_share, fill = sendung)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8), alpha = 0.4) +
+  scale_fill_manual(values = sendungsfarben, name = "Broadcast") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +  # <-- HERE!
+  labs(
+    x = "Time period",
+    y = "Share of populist statements per broadcast (%)",
+    title = "Populism share per individual broadcast by time period and format",
+    fill = "Broadcast",
+    caption = paste("N per format and time period:\n", n_legend)
+  ) +
+  theme_minimal()
+
+
+
+# Version 2
+boxplot_zeit_proformat <-   ggplot(pro_episode, aes(x = zeitraum, y = populismus_share, fill = sendung)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA, size = 1) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8), alpha = 0.5, size = 1.2) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 23, size = 2, fill = "white", color = "black",
+    position = position_dodge(0.8)
+  ) +
+  scale_fill_manual(values = sendungsfarben, name = "Broadcast format") +
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, 0.12)) +  
+  labs(
+    x = "Time period",
+    y = "Share of populist statements (%)",
+    title = "Development of populism share across different time periods",
+    subtitle = "Boxplots and individual values by format",
+    fill = "Broadcast"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 17, face = "bold"),
+    legend.position = "right",  # Legend right
+    axis.text = element_text(size = 12),
+    plot.caption = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(margin = margin(t = 25)) 
+  )
+
+ggsave("boxplot_zeit_proformat.png", boxplot_zeit_proformat, width = 10, height = 6, dpi = 300)
+ggsave("boxplot_zeit_proformat.pdf", boxplot_zeit_proformat, width = 10, height = 6)
+# ----------------------------------------------------------------------------------
+## if time period of broadcasts is considered:
+## Point diagram
+ggplot(pro_episode, aes(x = date, y = populismus_share, color = sendung)) +
+  geom_point() +
+  facet_wrap(~zeitraum)
+
+## Line diagram
+# Calculate populism share per day and broadcast
+populismus_zeit_sendung <- df_gesamt %>%
+  group_by(date, sendung, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# Set factor order here
+populismus_zeit_sendung$zeitraum <- factor(
+  populismus_zeit_sendung$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot
+ggplot(populismus_zeit_sendung, aes(x = date, y = populismus_share, color = sendung)) +
+  geom_line() +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE) +
+  facet_wrap(~zeitraum, scales = "free_x") +
+  labs(
+    title = "Populism share over time per broadcast and time period",
+    x = "Date",
+    y = "Populism share"
+  ) +
+  theme_minimal()
+```
+
+# Raincloud: Formats over time
+```{r}
+  # Generate n labels per group
+labels_n <- labels %>%
+  arrange(zeitraum, sendung) %>%
+  mutate(txt = paste0(sendung, " (", zeitraum, "): n = ", n))
+n_text <- labels %>%
+  arrange(zeitraum, sendung) %>%
+  mutate(txt = paste0(sendung, ": n = ", n)) %>%
+  group_by(zeitraum) %>%
+  summarise(txt = paste(txt, collapse = "; ")) %>%
+  mutate(txt = paste0(zeitraum, ":\n", txt)) %>%
+  pull(txt) %>%
+  paste(collapse = "\n\n") # Paragraph after each time period
+
+dodge_width <- 0.8  # or another value depending on desired spacing
+
+# Then in the plot:
+raincloud_zeit_proformat <- ggplot(pro_episode, aes(x = zeitraum, y = populismus_share, fill = sendung, color = sendung)) +
+  ggdist::stat_halfeye(
+    adjust = .5, width = .3, justification = -.18, .width = 0,
+    point_colour = NA, position = position_dodge(width = dodge_width), alpha = 0.5
+  ) +
+  geom_boxplot(
+    width = .13, outlier.color = NA, fill = NA, color = "black",
+    position = position_dodge(width = dodge_width)
+  ) +
+  ggdist::stat_dots(
+    side = "left", justification = 1.08, binwidth = .01, dotsize = 0.08,
+    position = position_dodge(width = dodge_width), alpha = 0.3, color = "grey30"
+  ) +
+  scale_fill_manual(values = sendungsfarben, name = "Format") +
+  scale_color_manual(values = sendungsfarben, guide = "none") +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(0, 0.12), breaks = seq(0, 0.12, 0.02),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  labs(
+    x = "Time period",
+    y = "Share of populist statements per format (%)",
+    title = "Raincloud plot: Populism share per individual broadcast by time period and format",
+    fill = "Broadcast format",
+    caption = paste0("Point: mean per group, n = number of broadcasts\n", n_text)
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size = 12),
+    axis.text.x = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(size = 11),
+    plot.caption = element_text(size = 10, hjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+ggsave("raincloud_zeit_proformat.png", raincloud_zeit_proformat, width = 10, height = 6, dpi = 300)
+```
+
+## Significance tests: Time periods
+
+```{r}
+# For the time period "Rest"
+rest_data <- pro_episode %>% filter(zeitraum == "Rest")
+kruskal.test(populismus_share ~ sendung, data = rest_data)
+# Post-hoc test:
+pairwise.wilcox.test(rest_data$populismus_share, rest_data$sendung)
+########### In the time period "Rest", broadcasts do not differ significantly in populism share. The distribution of populism share is therefore similar across "HaF", "Illner" and "Lanz" in this period.
+
+# For the time period "Confidence vote"
+vf_data <- pro_episode %>% filter(zeitraum == "Confidence vote")
+kruskal.test(populismus_share ~ sendung, data = vf_data)
+# Post-hoc test:
+pairwise.wilcox.test(vf_data$populismus_share, vf_data$sendung)
+######### In the time period "Confidence vote", talk shows (HaF, Illner, Lanz) show no statistically significant differences in the share of populist statements per broadcast. The results confirm that the populism share in this period is comparable between broadcasts.
+
+# For the time period "Federal election"
+btw_data <- pro_episode %>% filter(zeitraum == "Federal election")
+kruskal.test(populismus_share ~ sendung, data=btw_data)
+# Post-hoc test:
+pairwise.wilcox.test(btw_data$populismus_share, btw_data$sendung)
+##########  no significant difference in the share of populist statements per broadcast. Both the overall test and pairwise comparisons show that broadcasts do not differ statistically from each other in this period in terms of populism share.
+
+############# overall also no significant differences
+```
+
+
+## Role
+
+### Overview
+```{r}
+# Calculate populism share per role and time period
+populismus_role_zeit <- df_gesamt %>%
+  filter (speaker_id != "e_unbekannt_01") %>%
+  group_by(role, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+
+# Set order of time periods
+populismus_role_zeit$zeitraum <- factor(
+  populismus_role_zeit$zeitraum, 
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot
+ggplot(populismus_role_zeit, aes(x = zeitraum, y = populismus_share, group = role, color = role)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Populism share per role and time period",
+    x = "Time period",
+    y = "Populism share"
+  ) +
+  theme_minimal()
+
+
+
+### Boxplot
+
+# 1. Aggregate individual values (e.g., per broadcast/episode)
+pro_episode_role <- df_gesamt %>%
+    filter (speaker_id != "e_unbekannt_01") %>%
+  group_by(role, zeitraum, show_id) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# 2. N-table for legend
+n_table <- pro_episode_role %>%
+  group_by(role, zeitraum) %>%
+  summarise(N = n(), .groups = "drop") %>%
+  pivot_wider(names_from = zeitraum, values_from = N, values_fill = 0)
+
+n_legend <- paste(
+  apply(n_table, 1, function(row) {
+    sprintf("%s: Rest=%s, Confidence vote=%s, Federal election=%s",
+            row["role"], row["Rest"], row["Confidence vote"], row["Federal election"])
+  }),
+  collapse = "\n"
+)
+
+# 3. Set order of time periods
+pro_episode_role$zeitraum <- factor(
+  pro_episode_role$zeitraum, 
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# 4. Boxplot with N legend
+ggplot(pro_episode_role, aes(x = zeitraum, y = populismus_share, fill = role)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8), alpha = 0.4) +
+  labs(
+    title = "Populism share per role and time period (boxplot)",
+    x = "Time period",
+    y = "Share of populist statements",
+    fill = "Role",
+    caption = paste("N per role and time period:\n", n_legend)
+  ) +
+  theme_minimal()
+```
+
+### Newscasts/Broadcast segments 
+
+```{r}
+# Calculate share per newscast/broadcast segment, time period and show_id
+top_einspieler_pop <- df_gesamt %>%
+  filter(role == "E", speaker_id != "e_unbekannt_01") %>%
+  group_by(show_id, zeitraum, name, sentences...20) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# by format and time period
+df_gesamt %>%
+  filter(role == "E", speaker_id != "e_unbekannt_01") %>%
+  group_by(sendung, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# Select top 5 with highest populism share per time period
+top3_einspieler_pop  <- top_einspieler_pop %>%
+  group_by(zeitraum) %>%
+  arrange(desc(populismus_share)) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# --------------------------------------------------------------------------------
+
+### Lindner
+# populismus_share per show_id for Lindner, newscast, confidence vote
+lindner_vf_shares <- df_gesamt %>%
+  filter(
+    name == "Christian Lindner",
+    zeitraum == "Confidence vote",
+    role == "E",
+    speaker_id != "e_unbekannt_01"
+  ) %>%
+  group_by(show_id) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(populismus_share))
+
+# show_ids with highest populismus_share (e.g. Top 3)
+top_show_ids <- lindner_vf_shares %>%
+  slice_head(n = 3) %>%
+  pull(show_id)
+
+# populismus_share
+lindner_top_saetze <- df_gesamt %>%
+  filter(
+    name == "Christian Lindner",
+    zeitraum == "Confidence vote",
+    role == "E",
+    speaker_id != "e_unbekannt_01",
+    show_id %in% top_show_ids
+  ) %>%
+  left_join(
+    lindner_vf_shares %>% select(show_id, populismus_share),
+    by = "show_id"
+  ) %>%
+  select(show_id, name, sentence = `sentences...20`, populismus_share)
+
+print(lindner_top_saetze)
+```
+
+
+#### Moderation
+```{r}
+########### overall without moderator ZDF
+# Populism share of moderation (without moderator Z, overall)
+mod_pop_gesamt <- df_gesamt %>%
+  filter(role == "Moderation", name != "Moderator Z") %>%
+   group_by(name) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count
+  )  %>%
+  arrange(desc(populismus_share))
+
+# Consider time period
+mod_pop_gesamt_zeit <- df_gesamt %>%
+  filter(role == "Moderation", name != "Moderator Z") %>%
+  group_by(name, zeitraum) %>%   # <- Grouping by moderator and time period!
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  ) %>%
+  arrange(zeitraum, desc(populismus_share))
+
+mod_pop_gesamt_zeit <- mod_pop_gesamt_zeit %>%
+  mutate(
+    zeitraum = factor(zeitraum, levels = c("Rest", "Confidence vote", "Federal election"))
+  )
+
+# Visualization
+ggplot(mod_pop_gesamt_zeit, aes(x = zeitraum, y = populismus_share, fill = name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Populism share by moderator and time period", x = "Time period", y = "Populism share") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal()
+
+#+# Boxplot
+# 1. Calculate share per broadcast
+df_box <- df_gesamt %>%
+  filter(role == "Moderation", name != "Moderator Z") %>%
+  group_by(name, zeitraum, source) %>%  # source = broadcast ID
+  summarise(
+    populismus_share = mean(as.numeric(populismus), na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Boxplot: Distribution of populism shares per broadcast
+ggplot(df_box, aes(x = zeitraum, y = populismus_share, fill = name)) +
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.6, outlier.shape = 21, outlier.size = 2) +
+  scale_fill_manual(values = c("Louis Klamroth"="#636363", "Markus Lanz"="#bdbdbd", "Maybrit Illner"="#3182bd")) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Populism share of moderation per broadcast and time period",
+    x = "Time period",
+    y = "Populism share per broadcast (%)",
+    fill = "Moderator"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 12),
+    panel.grid.minor = element_blank()
+  )
+
+## Significance
+kruskal.test(populismus_share ~ name, data = mod_pop_gesamt_zeit) # significant difference in populism share between moderators
+kruskal.test(populismus_share ~ zeitraum, data = mod_pop_gesamt_zeit) # no significant difference in populism share between time periods
+```
+
+
+#### Participants (TN)
+```{r}
+populismus_role_zeit <- df_gesamt %>%
+  filter(speaker_id != "e_unbekannt_01") %>%
+  group_by(role, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+populismus_tn_zeit <- populismus_role_zeit %>%
+  filter(role == "TN")
+
+# Set time periods in order
+populismus_tn_zeit$zeitraum <- factor(
+  populismus_tn_zeit$zeitraum, 
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plots
+# Line diagram for populismus_tn_zeit
+ggplot(populismus_tn_zeit, aes(x = zeitraum, y = populismus_share, group = 1)) +
+  geom_line(size = 1, color = "darkblue") +
+  geom_point(size = 2, color = "darkblue") +
+  labs(
+    title = "Populism share of participants over time",
+    x = "Time period",
+    y = "Populism share"
+  ) +
+  theme_minimal()
+
+
+# 1. Aggregation per broadcast/episode for participants
+pro_episode_tn <- df_gesamt %>%
+    filter(speaker_id != "e_unbekannt_01", role == "TN") %>%
+    group_by(zeitraum, show_id) %>%
+    summarise(
+      populismus_count = sum(populismus, na.rm = TRUE),
+      total_count = n(),
+      populismus_share = populismus_count / total_count,
+      .groups = "drop"
+    )
+
+# 2. N-table for legend
+n_table_tn <- pro_episode_tn %>%
+  group_by(zeitraum) %>%
+  summarise(N = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = zeitraum, values_from = N, values_fill = 0)
+
+n_legend_tn <- paste(
+  apply(n_table_tn, 1, function(row) {
+    sprintf("%s: N=%s", names(row)[-1], unlist(row)[-1])
+  }),
+  collapse = "\n"
+)
+
+# 3. Time periods as factor (order)
+pro_episode_tn$zeitraum <- factor(
+  pro_episode_tn$zeitraum, 
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# 4. Boxplot for participants
+ggplot(pro_episode_tn, aes(x = zeitraum, y = populismus_share, fill = zeitraum)) +
+  geom_boxplot(outlier.shape = NA, width = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.4, color = "black") +
+  labs(
+    title = "Populism share of participants per broadcast and time period (boxplot)",
+    x = "Time period",
+    y = "Share of populist statements",
+    fill = "Time period",
+    caption = paste("N per time period:\n", n_legend_tn)
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+# Who are they?
+
+# Step 1: Calculate populism share per participant, time period, broadcast
+populistic_tn <- df_gesamt %>%
+  filter(role == "TN", speaker_id != "e_unbekannt_01") %>%
+  group_by(zeitraum, name, show_id, job, party) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# Step 2: Select most populist participants per time period (e.g. top 3 per period)
+most_populist_tn_per_period <- populistic_tn %>%
+  group_by(zeitraum) %>%
+  arrange(desc(populismus_share)) %>%
+  slice_head(n = 3) %>%   # Adjust for top 3, customize as needed
+  ungroup()
+```
+
+
+#### per broadcast
+
+```{r}
+############### Newscasts (E)
+populismus_e_sendung_zeit <- df_gesamt %>%
+  filter(role == "E", speaker_id != "e_unbekannt_01") %>%
+  group_by(sendung, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+populismus_e_sendung_zeit$zeitraum <- factor(
+  populismus_e_sendung_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+ggplot(populismus_e_sendung_zeit, aes(x = zeitraum, y = populismus_share, color = sendung, group = sendung)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Populism share of newscasts over time by broadcast",
+    x = "Time period",
+    y = "Populism share",
+    color = "Broadcast"
+  ) +
+  theme_minimal()
+
+
+############### Moderation 
+populismus_mod_sendung_zeit <- df_gesamt %>%
+  filter(role == "Moderation", speaker_id != "e_unbekannt_01") %>%
+  group_by(sendung, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+populismus_mod_sendung_zeit$zeitraum <- factor(
+  populismus_mod_sendung_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+ggplot(populismus_mod_sendung_zeit, aes(x = zeitraum, y = populismus_share, color = sendung, group = sendung)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Populism share of moderation over time by broadcast",
+    x = "Time period",
+    y = "Populism share",
+    color = "Broadcast"
+  ) +
+  theme_minimal()
+##### clearly Illner always above all
+
+
+############### Participants (TN)
+
+# Populism share for participants by broadcast and time period
+populismus_tn_sendung_zeit <- df_gesamt %>%
+  filter(role == "TN", speaker_id != "e_unbekannt_01") %>%
+  group_by(sendung, zeitraum) %>%
+  summarise(
+    populismus_count = sum(populismus, na.rm = TRUE),
+    total_count = n(),
+    populismus_share = populismus_count / total_count,
+    .groups = "drop"
+  )
+
+# Set order of time periods (optional)
+populismus_tn_sendung_zeit$zeitraum <- factor(
+  populismus_tn_sendung_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot: Line plot per broadcast over time
+ggplot(populismus_tn_sendung_zeit, aes(x = zeitraum, y = populismus_share, color = sendung, group = sendung)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Populism share of participants over time by broadcast",
+    x = "Time period",
+    y = "Populism share",
+    color = "Broadcast"
+  ) +
+  theme_minimal()
+
+
+
+########################### Combined comparison
+## Lines
+# Combine data
+populismus_all_roles <- df_gesamt %>%
+  filter(role %in% c("E", "Moderation", "TN"), speaker_id != "e_unbekannt_01") %>%
+  group_by(role, sendung, zeitraum) %>%
+  summarise(
+    populismus_share = sum(populismus, na.rm = TRUE) / n(),
+    .groups = "drop"
+  )
+
+populismus_all_roles$zeitraum <- factor(
+  populismus_all_roles$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+ggplot(populismus_all_roles, aes(x = zeitraum, y = populismus_share, color = sendung, group = sendung)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ role) +
+  labs(
+    title = "Populism share over time by role and broadcast",
+    x = "Time period",
+    y = "Populism share",
+    color = "Broadcast"
+  ) +
+  theme_minimal()
+
+## Boxplot
+# 1. Aggregation: Populism share per broadcast, time period, role and episode
+populismus_box <- df_gesamt %>%
+  filter(role %in% c("E", "Moderation", "TN"), speaker_id != "e_unbekannt_01") %>%
+  group_by(role, sendung, zeitraum, show_id) %>%
+  summarise(
+    populismus_share = sum(populismus, na.rm = TRUE) / n(),
+    .groups = "drop"
+  )
+
+populismus_box$zeitraum <- factor(
+  populismus_box$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# 2. Boxplot: Distribution by role, broadcast and time period
+ggplot(populismus_box, aes(x = zeitraum, y = populismus_share, fill = sendung)) +
+  geom_boxplot(position = position_dodge(width = 0.8), outlier.shape = NA) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8), alpha = 0.3, size = 1) +
+  facet_wrap(~ role) +
+  labs(
+    title = "Populism share by role, broadcast and time period (boxplot)",
+    x = "Time period",
+    y = "Populism share",
+    fill = "Broadcast"
+  ) +
+  theme_minimal()
+```
+
+
+## Profession
+
+```{r}
+df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(job) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(anteil_pop)
+###
+# Business          2664   125     0.0469
+# Politics         30464  1637     0.0537
+# Media and Culture 16787  1152     0.0686
+
+job_pop_zeit <- df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(job, zeitraum) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(job, zeitraum)
+
+# Set order of time periods (optional)
+job_pop_zeit$zeitraum <- factor(
+  job_pop_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+ggplot(job_pop_zeit, aes(x = zeitraum, y = anteil_pop, color = job, group = job)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Populism share by profession over time (participants)",
+    x = "Time period",
+    y = "Share of populist sentences"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal()
+
+# Media/culture + science relatively continuously upward
+# Politics drops during confidence vote
+# Expert and public drops during confidence vote
+
+
+
+job_pop_sendung_zeit <- df_gesamt %>%
+  filter(role == "TN") %>%
+  group_by(sendung, job, zeitraum) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(sendung, zeitraum, desc(anteil_pop))
+
+# Optional: Set time periods as factor order
+job_pop_sendung_zeit$zeitraum <- factor(
+  job_pop_sendung_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Bar chart with all
+ggplot(job_pop_sendung_zeit, aes(x = sendung, y = anteil_pop, fill = job)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ zeitraum) +
+  labs(
+    title = "Share of populist statements by broadcast, profession and time period",
+    x = "Broadcast",
+    y = "Share of populist statements"
+  ) +
+  theme_minimal()
+
+# Line plot: Temporal progression for each profession by broadcast
+ggplot(job_pop_sendung_zeit, aes(x = zeitraum, y = anteil_pop, color = job, group = job)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ sendung) +
+  labs(
+    title = "Temporal progression: Populism share by profession and broadcast",
+    x = "Time period",
+    y = "Share of populist statements",
+    color = "Profession"
+  ) +
+  theme_minimal()
+
+
+## CONCLUSION:
+# Media and culture is the profession group with the highest populism share in every time period. Particularly high during federal election. (Federal election: 9.2% Confidence vote: 7.5% Rest: 6.1%)
+# Politics also shows a decline in populism share from "Federal election" to "Confidence vote". The share is always below "Media and culture". (Federal election: 6.3% Confidence vote: 4.6% Rest: 5.4%)
+# Business moves between politics and media/culture, with a slight increase during "Confidence vote". (Federal election: 6.1% Confidence vote: 5.2% Rest: 4.3%)
+# Science remains consistently low and shows no major differences between time periods. (Federal election: 5.7% Confidence vote: 3.7% Rest: 3.7%)
+# Expert: Share drops in "Confidence vote" to 1.4% (otherwise 4.3–5.3%)
+# Public: Share also particularly low during "Confidence vote" (1.4%), otherwise 3.3–5.1%
+
+# The profession group differences are much more pronounced than temporal fluctuations.
+
+```
+
+### Line diagram: final
+```{r}
+# Job colors
+jobfarben <- c(
+  "Politics" = "#1b9e77",
+  "Business" = "#d95f02",
+  "Media and culture" = "#7570b3",
+  "Science" = "#e7298a",
+  "Expert" = "#66a61e",
+  "Public" = "#e6ab02"
+)
+
+label_left  <- job_pop_zeit %>% filter(zeitraum == "Rest")
+label_right <- job_pop_zeit %>% filter(zeitraum == "Federal election")
+
+linien_job_zeit <- ggplot(job_pop_zeit, aes(x = zeitraum, y = anteil_pop, group = job, color = job)) +
+  geom_line(size = 1.5) +
+  geom_point(size = 4) +
+  # Left at "Rest":
+  ggrepel::geom_text_repel(
+    data = label_left,
+    aes(label = scales::percent(anteil_pop, accuracy = 0.1)),
+    nudge_x = -0.25, # push left
+    hjust = 1,       # right-aligned to point
+    direction = "y",
+    size = 4,
+    fontface = "bold",
+    show.legend = FALSE,
+    segment.size = 0.2
+  ) +
+  # Right at "Federal election":
+  ggrepel::geom_text_repel(
+    data = label_right,
+    aes(label = scales::percent(anteil_pop, accuracy = 0.1)),
+    nudge_x = 0.25,  # push right
+    hjust = 0,       # left-aligned to point
+    direction = "y",
+    size = 4,
+    fontface = "bold",
+    show.legend = FALSE,
+    segment.size = 0.2
+  ) +
+  scale_color_manual(values = jobfarben, name = "Profession") +
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, NA)) +
+  labs(
+    title = "Development of populism share by profession over time",
+    subtitle = "Comparison of professions across three political phases",
+    x = "Time period",
+    y = "Share of populist statements (%)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 13),
+    axis.text.x = element_text(size = 13),
+    axis.text.y = element_text(size = 12),
+    plot.caption = element_text(size = 11, hjust = 1),
+    panel.grid.minor = element_blank(),
+   axis.title.x = element_text(margin = margin(t = 25)) 
+  )
+
+ggsave("linien_job_zeit.png", linien_job_zeit, width = 10, height = 6, dpi = 300)
+ggsave("linien_job_zeit.pdf", linien_job_zeit, width = 10, height = 6)
+```
+
+#### Focus on politics, media/culture and business
+```{r}
+# Select three outstanding profession groups
+job_pop_sendung_zeit_subset <- job_pop_sendung_zeit %>%
+  filter(job %in% c("Politics", "Media and culture", "Business"))
+
+ggplot(job_pop_sendung_zeit_subset, aes(x = zeitraum, y = anteil_pop, color = sendung, group = sendung)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ job) +
+  labs(
+    title = "Populism share over time: Focus on three professions",
+    x = "Time period",
+    y = "Share of populist statements",
+    color = "Broadcast"
+  ) +
+  theme_minimal()
+
+# Facet by time period ("split by time point")
+ggplot(job_pop_sendung_zeit_subset, aes(x = job, y = anteil_pop, fill = sendung)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  facet_wrap(~ zeitraum, ncol = 1) +
+  labs(
+    title = "Populism share by profession and broadcast\n(split by time period)",
+    x = "Profession",
+    y = "Share of populist statements",
+    fill = "Broadcast"
+  ) +
+  theme_minimal()
+```
+
+
+## Party
+
+```{r}
+# Populism share per party and time period
+party_pop_zeit <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), !(party %in% c("NA", "Ausland"))) %>%
+  mutate(
+    party_grouped = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(party_grouped, zeitraum) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(party_grouped, zeitraum)
+
+# Set order of time periods (optional)
+party_pop_zeit$zeitraum <- factor(
+  party_pop_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot: Facets by time period
+# Party as factor, sorted by mean in last time period (optional)
+party_order <- party_pop_zeit %>%
+  filter(zeitraum == "Federal election") %>%
+  arrange(desc(anteil_pop)) %>%
+  pull(party_grouped)
+
+party_pop_zeit$party_grouped <- factor(party_pop_zeit$party_grouped, levels = party_order)
+
+
+balken_party_zeit <- ggplot(party_pop_zeit, aes(x = party_grouped, y = anteil_pop, fill = party_grouped)) +
+  geom_col(width = 0.6, color = "white") +
+  geom_text(
+    aes(label = scales::percent(anteil_pop, accuracy = 0.1)),
+    vjust = -0.6, size = 4, fontface = "bold"
+  ) +
+  facet_wrap(
+    ~ zeitraum,
+    ncol = 1,
+    labeller = as_labeller(function(x) x) 
+  ) +
+  scale_fill_manual(values = parteifarben) +
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, 0.13), expand = expansion(mult = c(0, 0.08))) +
+  labs(
+    title = "Development of populism share by party affiliation over time",
+    subtitle = "Comparison of parties across three political phases",
+    x = "Party affiliation",
+    y = "Share of populist statements (%)"
+  ) +
+    scale_x_discrete(
+  labels = c(
+    "BSW" = "BSW",
+    "Linke" = "The Left",
+    "Union" = "Union",
+    "FW" = "FW",
+    "FDP" = "FDP",
+    "AfD" = "AfD",
+    "die Grünen" = "B90/Greens",
+    "SPD" = "SPD"
+  )
+) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 13),
+    axis.text.x = element_text( size = 12, angle = 0, vjust = 1, hjust = 0.5), 
+    axis.text.y = element_text(size = 12),
+    strip.text = element_text( size = 13),
+    plot.caption = element_text(size = 11, hjust = 1),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(margin = margin(t = 25))
+  )
+
+ggsave("balken_party_zeit.png", balken_party_zeit, width = 10, height = 6, dpi = 300)
+ggsave("balken_party_zeit.pdf", balken_party_zeit, width = 12, height = 7)
+```
+
+##### Government parties
+
+```{r}
+# Populism share for SPD, Greens and FDP across time periods
+party_pop_zeit_sel <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), party %in% c("SPD", "die Grünen", "FDP")) %>%
+  group_by(party, zeitraum) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(party, zeitraum)
+
+# Set order of time periods
+party_pop_zeit_sel$zeitraum <- factor(
+  party_pop_zeit_sel$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot
+ggplot(party_pop_zeit_sel, aes(x = zeitraum, y = anteil_pop, fill = party)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  scale_fill_manual(values = c("SPD" = "#E3000F", "die Grünen" = "#46962B", "FDP" = "#FFED00")) +
+  labs(
+    title = "Populism share of parties SPD, Greens and FDP by time period",
+    x = "Time period",
+    y = "Share of populist statements",
+    fill = "Party"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+
+
+
+
+
+# Convert to wide format
+party_wide <- party_pop_zeit_sel %>%
+  select(party, zeitraum, anteil_pop) %>%
+  pivot_wider(names_from = zeitraum, values_from = anteil_pop)
+
+# Calculate differences (for each party)
+party_diffs <- party_wide %>%
+  mutate(
+    diff_FE_Rest = `Federal election` - Rest,
+    diff_CV_Rest = `Confidence vote` - Rest,
+    diff_FE_CV = `Federal election` - `Confidence vote`
+  )
+```
+
+
+### Parties per broadcast
+```{r}
+party_pop_sendung_zeit <- df_gesamt %>%
+  filter(role == "TN") %>%
+  filter(job == "Politik") %>%
+  filter(!is.na(party), !(party %in% c("NA", "Ausland"))) %>%
+  mutate(
+    party_grouped = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(party_grouped, sendung, zeitraum) %>%
+  summarise(
+    n_total = n(),
+    n_pop = sum(populismus, na.rm = TRUE),
+    anteil_pop = mean(populismus, na.rm = TRUE),
+    mean_pop = mean(pop_max[populismus], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(party_grouped, sendung, zeitraum)
+
+party_pop_sendung_zeit$zeitraum <- factor(
+  party_pop_sendung_zeit$zeitraum,
+  levels = c("Rest", "Confidence vote", "Federal election")
+)
+
+# Plot
+party_labels <- c(
+  "AfD" = "AfD",
+  "BSW" = "BSW",
+  "die Grünen" = "B90/Greens",
+  "FDP" = "FDP",
+  "FW" = "FW",
+  "Linke" = "The Left",
+  "SPD" = "SPD",
+  "Union" = "Union"
+)
+
+party_pop_sendung_zeit$party_anzeige <- party_labels[party_pop_sendung_zeit$party_grouped]
+
+balken_party_zeit_proformat <- ggplot(
+  party_pop_sendung_zeit,
+  aes(x = party_anzeige, y = anteil_pop, fill = sendung)
+) +
+  geom_col(
+    position = position_dodge(width = 0.8),
+    width = 0.66,
+    color = "white"
+  ) +
+  geom_text(
+    aes(label = scales::percent(anteil_pop, accuracy = 0.1)),
+    position = position_dodge(width = 0.8),
+    vjust = -0.7,
+    size = 4,
+    fontface = "plain",
+    color = "black"
+  ) +
+  facet_wrap(
+    ~ zeitraum,
+    ncol = 1,
+    labeller = as_labeller(function(x) x)
+  ) +
+  scale_fill_manual(
+    values = sendungsfarben,
+    name = "Format"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(0, 0.25),
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  labs(
+    title = "Development of populism share by party affiliation\nper format over time",
+    x = "Party affiliation",
+    y = "Share of populist statements(%)",
+    fill = "Format"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 13),
+    axis.title = element_text(),
+    axis.text.x = element_text(size = 12, angle = 0, vjust = 1, hjust = 0.5),
+    axis.text.y = element_text(size = 12),
+    strip.text = element_text(size = 13, color = "black"),
+    legend.position = "top",
+    legend.title = element_text( size = 13),
+    legend.text = element_text(size = 12),
+    plot.caption = element_text(size = 11, hjust = 1),
+    panel.grid.minor = element_blank(),
+    axis.title.x = element_text(margin = margin(t = 25))
+  )
+
+  ggsave("balken_party_zeit_proformat.png", balken_party_zeit_proformat, width = 10, height = 6, dpi = 300)
+   ggsave("balken_party_zeit_proformat.pdf", balken_party_zeit_proformat, width = 10, height = 6)
+
+# Heatmap by time period (one panel per time period)
+ggplot(party_pop_sendung_zeit, aes(x = sendung, y = party_grouped, fill = anteil_pop)) +
+  geom_tile(color = "white") +
+  facet_wrap(~ zeitraum, ncol = 1) +
+  scale_fill_gradient(low = "white", high = "#E3000F", name = "Populism share") +
+  labs(
+    title = "Populism share: Party x Broadcast x Time period",
+    x = "Broadcast",
+    y = "Party"
+  ) +
+  theme_minimal(base_size = 13)
+
+# Point plot per time period (for fluctuations)
+ggplot(party_pop_sendung_zeit, aes(x = sendung, y = anteil_pop, color = party_grouped)) +
+  geom_point(size = 3, alpha = 0.7, position = position_jitter(width = 0.2)) +
+  facet_wrap(~ zeitraum, ncol = 1) +
+  scale_color_manual(values = parteifarben) +
+  labs(
+    title = "Populism share by broadcast, party and time period",
+    x = "Broadcast",
+    y = "Populism share"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 13)
+
+### Illner really only invited greens, SPD and union during confidence vote
+
+
+# Populism share is party-dependent: AfD and BSW clearly stand out.
+# Broadcast effect: "Hart aber fair" more often provides an environment where populist statements are made – especially for AfD, BSW and Left.
+# Temporal consistency: Party and broadcast-specific differences are more stable than differences between time periods.
+
+## Comparison of time periods
+# The graphic shows for each party and each broadcast the populism share in three time periods ("Rest", "Confidence vote", "Federal election"), each in separate panels.
+# Basic patterns (e.g., AfD and BSW highest, Greens/FDP/SPD/Union lower) repeat across all three time periods.
+# Bar heights fluctuate from period to period, but the relationship between parties remains constant.
+```
+
+#### Scatterplot: Party, broadcast, time, individuals
+Feels like too much detail overall
+```{r}
+# 1. Share of populist sentences per person, broadcast and time period (new name!)
+df_politicians_time <- df_gesamt %>%
+  filter(
+    role == "TN",
+    job == "Politik",
+    !party %in% c("Ausland", "NA"),
+    !is.na(party)
+  ) %>%
+  mutate(
+    party = case_when(
+      party %in% c("CDU", "CSU") ~ "CDU/CSU",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(name, party, sendung, zeitraum) %>%
+  summarise(
+    n_sentences = n(),
+    n_pop_sentences = sum(populismus == 1, na.rm = TRUE),
+    pop_sentence_share = n_pop_sentences / n_sentences,
+    mean_Anti_Elitism = mean(Anti_Elitism, na.rm = TRUE),
+    mean_People_Centrism = mean(People_Centrism, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    lastname = stringr::word(name, -1)
+  )
+
+# Set order of time periods
+df_politicians_time$zeitraum <- factor(df_politicians_time$zeitraum, levels = c("Rest", "Confidence vote", "Federal election"))
+
+# 2. Top 5 politicians per party, broadcast & time period (new name!)
+df_top5_time <- df_politicians_time %>%
+  group_by(party, sendung, zeitraum) %>%
+  arrange(desc(pop_sentence_share)) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# 3. Plot with time dimension and new object names
+ggplot(df_politicians_time, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point() +
+  geom_text(
+    data = df_top5_time,
+    aes(label = lastname),
+    hjust = 0, nudge_x = 0.01,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(range = c(3, 8)) +
+  scale_alpha_continuous(range = c(0.5, 1), name = "Populism share (sentences)") +
+  facet_grid(zeitraum ~ party + sendung) +
+  scale_color_manual(values = party_colors) +
+  labs(
+    x = "Anti-Elitism",
+    y = "People-Centrism",
+    color = "Party",
+    size = "Mentions",
+    alpha = "Populism share (sentences)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right"
+  )
+```
+
+#### Scatterplot: without broadcast
+Calculate and visualize populism share per politician, party and time period – without distinguishing by broadcast and with new variable names:
+```{r}
+# 1. Share of populist sentences per person, party and time period (without broadcast)
+df_politicians_time_only <- df_gesamt %>%
+  filter(
+    role == "TN",
+    job == "Politik",
+    !party %in% c("Ausland", "NA"),
+    !is.na(party)
+  ) %>%
+  mutate(
+    party = case_when(
+      party %in% c("CDU", "CSU") ~ "Union",
+      TRUE ~ party
+    )
+  ) %>%
+  group_by(name, party, zeitraum) %>%
+  summarise(
+    n_sentences = n(),
+    n_pop_sentences = sum(populismus == 1, na.rm = TRUE),
+    pop_sentence_share = n_pop_sentences / n_sentences,
+    mean_Anti_Elitism = mean(Anti_Elitism, na.rm = TRUE),
+    mean_People_Centrism = mean(People_Centrism, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    lastname = stringr::word(name, -1)
+  )
+
+# Set order of time periods
+df_politicians_time_only$zeitraum <- factor(df_politicians_time_only$zeitraum, levels = c("Rest", "Confidence vote", "Federal election"))
+
+# 2. Top 5 politicians per party & time period by populism share (without broadcast)
+df_top5_time_only <- df_politicians_time_only %>%
+  group_by(party, zeitraum) %>%
+  arrange(desc(pop_sentence_share)) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# 3. Plot (facets by time period)
+scatterplot_party_namen_zeit_proformat <- ggplot(df_politicians_time_only, aes(
+  x = mean_Anti_Elitism,
+  y = mean_People_Centrism,
+  color = party,
+  size = n,
+  alpha = pop_sentence_share
+)) +
+  geom_point(stroke = 1, shape = 21, fill = NA) +
+  ggrepel::geom_text_repel(
+    data = df_top5_time_only,
+    aes(label = lastname),
+    color = "black",
+    size = 4,
+    fontface = "plain",
+    box.padding = 0.5,
+    max.overlaps = 20,
+    show.legend = FALSE
+  ) +
+  scale_size_continuous(
+    range = c(3, 8),
+    breaks = c(200, 400, 600, 800),
+    name = "Number of sentences"
+  ) +
+  scale_alpha_continuous(
+    range = c(0.5, 1),
+    name = "Populism share (sentences)",
+    breaks = seq(0, 0.2, 0.05),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  facet_wrap(~ zeitraum, ncol = 1) +
+  scale_color_manual(values = parteifarben, name = "Party") +
+  labs(
+    title = "Politicians by party and time period",
+    subtitle = "Top 5 politicians per party and time period with names",
+    x = "Anti-Elitism",
+    y = "People-Centrism",
+    color = "Party",
+    size = "Number of sentences",
+    alpha = "Populism share (sentences)"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(size = 14, margin = margin(b = 10)),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    strip.text = element_text(, size = 13, color = "black"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 11, hjust = 1, margin = margin(t = 10))
+  ) +
+scale_color_manual(
+  values = parteifarben,
+  name = "Party",
+  labels = party_labels
+)
+
+  ggsave("scatterplot_party_namen_zeit_proformat.png", scatterplot_party_namen_zeit_proformat, width = 12, height = 7, dpi = 300)
+   ggsave("scatterplot_party_namen_zeit_proformat.pdf", scatterplot_party_namen_zeit_proformat, width = 12, height = 7)
+```

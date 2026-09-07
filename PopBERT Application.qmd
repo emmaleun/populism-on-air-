@@ -1,0 +1,357 @@
+---
+title: "PopBERT Application"
+format: html
+editor: visual
+---
+
+
+# PopBERT Application
+
+## Hart aber Fair
+
+```{python}
+import torch
+import numpy as np
+from transformers import AutoModelForSequenceClassification
+from transformers import AutoTokenizer
+import pandas as pd
+import time
+
+# load tokenizer
+tokenizer = AutoTokenizer.from_pretrained("luerhard/PopBERT")
+
+# load model
+model = AutoModelForSequenceClassification.from_pretrained("luerhard/PopBERT")
+
+# Dataframe
+haf_dataframe = pd.read_csv("haf_dataframe.csv")
+
+
+#Umwandlung in Liste um str Fehzler bei encoding zuvermeiden
+dialoguelist_haf_dataframe = haf_dataframe['dialogue'].tolist() #Lösung str Problem
+
+```
+
+### Sentences Splitter german
+```{python}
+from nltk.tokenize import PunktSentenceTokenizer
+import nltk
+# Lade das Punkt-Modell (einmalig notwendig, um Modelle herunterzuladen)
+nltk.download('punkt')
+from nltk import punkt
+
+
+# Lade das Punkt-Modell
+nltk.download('punkt')
+
+# Initialisiere den deutschen Tokenizer
+german_tokenizer = PunktSentenceTokenizer()
+
+# Satztrennung anwenden
+haf_sent = [german_tokenizer.tokenize(dialoguelist_haf_dataframe ) for dialoguelist_haf_dataframe  in dialoguelist_haf_dataframe ]
+# Flache Liste (alle Sätze in einer einzigen Liste)
+haf_sent  = [sentence for doc in haf_sent  for sentence in doc]
+
+```
+
+
+### batches
+
+```{python}
+import torch
+import time
+import numpy as np
+
+
+batch_size = 16 
+all_probs = []
+
+start = time.time()
+
+for i in range(0, len(haf_sent ), batch_size):
+    batch_texts = haf_sent [i:i+batch_size]
+    # encode text with tokenizer
+    encodings = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
+    # predict
+    with torch.inference_mode():
+        out = model(**encodings)
+    # get probabilities
+    probs = torch.sigmoid(out.logits)
+    # Auf CPU und als NumPy-Array speichern
+    all_probs.append(probs.detach().cpu().numpy())
+
+end = time.time()
+
+# Alle Batch-Ergebnisse zusammenfügen
+probs_haf_sent = np.concatenate(all_probs, axis=0)
+print(probs_haf_sent)
+
+# Berechnung der verstrichenen Zeit
+verstrichene_zeit = end - start
+print(f'Ausführungszeit: {verstrichene_zeit:.2f} Sekunden') #  43min
+
+
+#df:
+df_probs_haf_sent = pd.DataFrame({'sentences':haf_sent, 'Anti_Elitism':probs_haf_sent[:,0], 'People_Centrism':probs_haf_sent[:,1], 'Left_Wing_Host_Ideology':probs_haf_sent[:,2], 'Right_Wing_Host_Ideology':probs_haf_sent[:,3]})
+```
+
+
+
+```{python}
+haf_dataframe = pd.read_csv("haf_dataframe.csv")
+
+rows = []
+for _, row in haf_dataframe.iterrows():
+    sentences = german_tokenizer.tokenize(row['dialogue'])
+    for s in sentences:
+        new_row = row.copy()
+        new_row['sentences'] = s
+        rows.append(new_row)
+
+haf_dataframe_sent = pd.DataFrame(rows).drop(columns=['dialogue'])
+```
+
+
+### matched
+```{python}
+df_haf = pd.concat(
+    [haf_dataframe_sent.reset_index(drop=True), df_probs_haf_sent],
+    axis=1
+)
+
+# Als CSV speichern
+df_haf.to_csv("df_haf.csv", index=False)
+```
+
+
+## Illner
+
+```{python}
+import torch
+import numpy as np
+from transformers import AutoModelForSequenceClassification
+from transformers import AutoTokenizer
+import pandas as pd
+import time
+
+# load tokenizer
+tokenizer = AutoTokenizer.from_pretrained("luerhard/PopBERT")
+
+# load model
+model = AutoModelForSequenceClassification.from_pretrained("luerhard/PopBERT")
+
+# Dataframe
+illner_dataframe = pd.read_csv("illner_dataframe.csv")
+
+
+#Umwandlung in Liste um str Fehzler bei encoding zuvermeiden
+dialoguelist_illner_dataframe = illner_dataframe['dialogue'].tolist() #Lösung str Problem
+
+```
+
+### Sentences Splitter german
+```{python}
+from nltk.tokenize import PunktSentenceTokenizer
+import nltk
+# Lade das Punkt-Modell (einmalig notwendig, um Modelle herunterzuladen)
+nltk.download('punkt')
+from nltk import punkt
+
+
+# Lade das Punkt-Modell
+nltk.download('punkt')
+
+# Initialisiere den deutschen Tokenizer
+german_tokenizer = PunktSentenceTokenizer()
+
+# Satztrennung anwenden
+illner_sent = [german_tokenizer.tokenize(dialoguelist_illner_dataframe ) for dialoguelist_illner_dataframe  in dialoguelist_illner_dataframe ]
+# Flache Liste (alle Sätze in einer einzigen Liste)
+illner_sent  = [sentence for doc in illner_sent  for sentence in doc]
+
+```
+
+### batches
+```{python}
+import torch
+import time
+import numpy as np
+
+
+batch_size = 16  # Passe ggf. an deinen RAM/GPU an
+all_probs = []
+
+start = time.time()
+
+for i in range(0, len(illner_sent ), batch_size):
+    batch_texts = illner_sent [i:i+batch_size]
+    # encode text with tokenizer
+    encodings = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
+    # predict
+    with torch.inference_mode():
+        out = model(**encodings)
+    # get probabilities
+    probs = torch.sigmoid(out.logits)
+    # Auf CPU und als NumPy-Array speichern
+    all_probs.append(probs.detach().cpu().numpy())
+
+end = time.time()
+
+# Alle Batch-Ergebnisse zusammenfügen
+probs_illner_sent = np.concatenate(all_probs, axis=0)
+print(probs_illner_sent)
+
+# Berechnung der verstrichenen Zeit
+verstrichene_zeit = end - start
+print(f'Ausführungszeit: {verstrichene_zeit:.2f} Sekunden') # 1856.31 Sekunden: 39 min
+
+
+#df:
+df_probs_illner_sent = pd.DataFrame({'sentences':illner_sent, 'Anti_Elitism':probs_illner_sent[:,0], 'People_Centrism':probs_illner_sent[:,1], 'Left_Wing_Host_Ideology':probs_illner_sent[:,2], 'Right_Wing_Host_Ideology':probs_illner_sent[:,3]})
+```
+
+
+
+```{python}
+illner_dataframe = pd.read_csv("illner_dataframe.csv")
+
+rows = []
+for _, row in illner_dataframe.iterrows():
+    sentences = german_tokenizer.tokenize(row['dialogue'])
+    for s in sentences:
+        new_row = row.copy()
+        new_row['sentences'] = s
+        rows.append(new_row)
+
+illner_dataframe_sent = pd.DataFrame(rows).drop(columns=['dialogue'])
+
+
+```
+
+
+### matched
+```{python}
+df_illner = pd.concat(
+    [illner_dataframe_sent.reset_index(drop=True), df_probs_illner_sent],
+    axis=1
+)
+
+# Als CSV speichern
+df_illner.to_csv("df_illner.csv", index=False)
+```
+
+
+## Lanz
+
+```{python}
+import torch
+import numpy as np
+from transformers import AutoModelForSequenceClassification
+from transformers import AutoTokenizer
+import pandas as pd
+import time
+
+# load tokenizer
+tokenizer = AutoTokenizer.from_pretrained("luerhard/PopBERT")
+
+# load model
+model = AutoModelForSequenceClassification.from_pretrained("luerhard/PopBERT")
+
+# Dataframe
+lanz_dataframe = pd.read_csv("lanz_dataframe.csv")
+
+
+#Umwandlung in Liste um str Fehzler bei encoding zuvermeiden
+dialoguelist_lanz_dataframe = lanz_dataframe['dialogue'].tolist() #Lösung str Problem
+
+```
+
+### Sentences Splitter german
+```{python}
+from nltk.tokenize import PunktSentenceTokenizer
+import nltk
+# Lade das Punkt-Modell (einmalig notwendig, um Modelle herunterzuladen)
+nltk.download('punkt')
+from nltk import punkt
+
+
+# Lade das Punkt-Modell
+nltk.download('punkt')
+
+# Initialisiere den deutschen Tokenizer
+german_tokenizer = PunktSentenceTokenizer()
+
+# Satztrennung anwenden
+lanz_sent = [german_tokenizer.tokenize(dialoguelist_lanz_dataframe ) for dialoguelist_lanz_dataframe  in dialoguelist_lanz_dataframe ]
+# Flache Liste (alle Sätze in einer einzigen Liste)
+lanz_sent  = [sentence for doc in lanz_sent  for sentence in doc]
+```
+
+### batches
+```{python}
+import torch
+import time
+import numpy as np
+
+
+batch_size = 16 
+all_probs = []
+
+start = time.time()
+
+for i in range(0, len(lanz_sent ), batch_size):
+    batch_texts = lanz_sent [i:i+batch_size]
+    # encode text with tokenizer
+    encodings = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
+    # predict
+    with torch.inference_mode():
+        out = model(**encodings)
+    # get probabilities
+    probs = torch.sigmoid(out.logits)
+    # Auf CPU und als NumPy-Array speichern
+    all_probs.append(probs.detach().cpu().numpy())
+
+end = time.time()
+
+# Alle Batch-Ergebnisse zusammenfügen
+probs_lanz_sent = np.concatenate(all_probs, axis=0)
+print(probs_lanz_sent)
+
+# Berechnung der verstrichenen Zeit
+verstrichene_zeit = end - start
+print(f'Ausführungszeit: {verstrichene_zeit:.2f} Sekunden') #  40 min
+
+
+#df:
+df_probs_lanz_sent = pd.DataFrame({'sentences':lanz_sent, 'Anti_Elitism':probs_lanz_sent[:,0], 'People_Centrism':probs_lanz_sent[:,1], 'Left_Wing_Host_Ideology':probs_lanz_sent[:,2], 'Right_Wing_Host_Ideology':probs_lanz_sent[:,3]})
+```
+
+
+
+```{python}
+lanz_dataframe = pd.read_csv("lanz_dataframe.csv")
+
+rows = []
+for _, row in lanz_dataframe.iterrows():
+    sentences = german_tokenizer.tokenize(row['dialogue'])
+    for s in sentences:
+        new_row = row.copy()
+        new_row['sentences'] = s
+        rows.append(new_row)
+
+lanz_dataframe_sent = pd.DataFrame(rows).drop(columns=['dialogue'])
+
+
+```
+
+
+### matched
+```{python}
+df_lanz = pd.concat(
+    [lanz_dataframe_sent.reset_index(drop=True), df_probs_lanz_sent],
+    axis=1
+)
+
+# Als CSV speichern
+df_lanz.to_csv("df_lanz.csv", index=False)
+```
